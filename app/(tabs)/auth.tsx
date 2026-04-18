@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -13,7 +14,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 export default function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -234,7 +234,7 @@ export default function AuthScreen() {
 
                 <Pressable style={styles.primaryButton} onPress={onLogin}>
                   <Text style={styles.primaryButtonText}>Sign In</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#0B1220" />
+                  <Ionicons name="arrow-forward" size={18} color="#dcdcdc" />
                 </Pressable>
               </View>
             ) : (
