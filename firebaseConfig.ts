@@ -14,7 +14,7 @@ const firebaseConfig = {
     projectId: "roomradarapp-50fb1",
     storageBucket: "roomradarapp-50fb1.firebasestorage.app",
     messagingSenderId: "220829230425",
-    appId: "1:220829230425:web:3a8f8a02fb1a76f493d848"
+    appId: "1:220829230425:web:3a8f8a02fb1a76f493d848",
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);

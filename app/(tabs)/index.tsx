@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { FirebaseError } from 'firebase/app';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -14,11 +17,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { loginUser, registerUser } from '../../authService';
 
 export default function AuthScreen() {
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -111,17 +118,78 @@ export default function AuthScreen() {
     [mode]
   );
 
-  const onLogin = () => {
-    console.log('Login pressed', { loginEmail, loginPassword });
+  const getAuthErrorMessage = (error: unknown): string => {
+    if (!(error instanceof FirebaseError)) {
+      return 'Something went wrong. Please try again.';
+    }
+
+    switch (error.code) {
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return 'Invalid email or password.';
+      case 'auth/email-already-in-use':
+        return 'This email is already in use.';
+      case 'auth/weak-password':
+        return 'Password should be at least 6 characters.';
+      case 'auth/network-request-failed':
+        return 'Network error. Check your connection and try again.';
+      default:
+        return error.message || 'Authentication failed. Please try again.';
+    }
   };
 
-  const onSignup = () => {
-    console.log('Signup pressed', {
-      fullName,
-      signupEmail,
-      signupPassword,
-      confirmPassword,
-    });
+  const onLogin = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!loginEmail.trim() || !loginPassword) {
+      Alert.alert('Missing information', 'Please enter your email and password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await loginUser(loginEmail, loginPassword);
+      router.replace('/explore');
+    } catch (error) {
+      Alert.alert('Sign in failed', getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onSignup = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!fullName.trim() || !signupEmail.trim() || !signupPassword || !confirmPassword) {
+      Alert.alert('Missing information', 'Please fill in all fields to create an account.');
+      return;
+    }
+
+    if (signupPassword !== confirmPassword) {
+      Alert.alert('Password mismatch', 'Passwords do not match.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await registerUser(fullName, signupEmail, signupPassword);
+      router.replace('/explore');
+    } catch (error) {
+      Alert.alert('Sign up failed', getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -232,9 +300,19 @@ export default function AuthScreen() {
                   <Text style={styles.forgotText}>Forgot password?</Text>
                 </Pressable>
 
-                <Pressable style={styles.primaryButton} onPress={onLogin}>
-                  <Text style={styles.primaryButtonText}>Sign In</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#dcdcdc" />
+                <Pressable
+                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+                  onPress={onLogin}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {isSubmitting ? 'Signing In...' : 'Sign In'}
+                  </Text>
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color="#0B1220" />
+                  ) : (
+                    <Ionicons name="arrow-forward" size={18} color="#dcdcdc" />
+                  )}
                 </Pressable>
               </View>
             ) : (
@@ -277,9 +355,19 @@ export default function AuthScreen() {
                   onRightPress={() => setShowConfirmPassword((prev) => !prev)}
                 />
 
-                <Pressable style={styles.primaryButton} onPress={onSignup}>
-                  <Text style={styles.primaryButtonText}>Create Account</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#0B1220" />
+                <Pressable
+                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+                  onPress={onSignup}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {isSubmitting ? 'Creating...' : 'Create Account'}
+                  </Text>
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color="#0B1220" />
+                  ) : (
+                    <Ionicons name="arrow-forward" size={18} color="#0B1220" />
+                  )}
                 </Pressable>
               </View>
             )}
@@ -539,6 +627,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 6,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.75,
   },
   primaryButtonText: {
     color: '#0B1220',
