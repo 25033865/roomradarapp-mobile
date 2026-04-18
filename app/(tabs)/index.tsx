@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -241,7 +242,11 @@ export default function AuthScreen() {
             ]}
           >
             <View style={styles.logoWrap}>
-              <Ionicons name="sparkles" size={26} color="#0B1220" />
+              <Image
+                source={require('../../assets/images/RoomRadarIcon.png')}
+                style={styles.brandIcon}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.title}>
               {mode === 'login' ? 'Welcome Back' : 'Create Account'}
@@ -531,6 +536,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+  },
+  brandIcon: {
+    width: 36,
+    height: 36,
   },
   title: {
     color: '#F8FBFF',
