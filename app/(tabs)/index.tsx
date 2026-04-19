@@ -245,7 +245,7 @@ export default function AuthScreen() {
               <Image
                 source={require('../../assets/images/RoomRadar.png')}
                 style={styles.brandIcon}
-                resizeMode="cover"
+                resizeMode="contain"
               />
             </View>
             <Text style={styles.title}>
@@ -529,19 +529,16 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   logoWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: '#EAF2FF',
-    alignItems: 'center',
+    width: 200,
+    height: 200,
+    alignItems: 'flex-start',
     justifyContent: 'center',
-    overflow: 'hidden',
-    marginBottom: 16,
+    marginLeft: -45,
+    marginBottom: -45,
   },
   brandIcon: {
     width: '100%',
     height: '100%',
-    borderRadius: 18,
   },
   title: {
     color: '#F8FBFF',
