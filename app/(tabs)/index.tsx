@@ -3,20 +3,20 @@ import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { loginUser, registerUser } from '../../authService';
@@ -430,6 +430,8 @@ function InputField({
   rightIcon,
   onRightPress,
 }: InputFieldProps) {
+  const inputModeKey = secureTextEntry ? 'secure' : 'plain';
+
   return (
     <View style={styles.inputWrap}>
       <View style={styles.inputIconWrap}>
@@ -437,12 +439,13 @@ function InputField({
       </View>
 
       <TextInput
+        key={inputModeKey}
         style={styles.input}
         placeholder={placeholder}
         placeholderTextColor="#7C8CA3"
         value={value}
         onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry}
+        secureTextEntry={Boolean(secureTextEntry)}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
       />
