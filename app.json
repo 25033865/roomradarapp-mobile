@@ -4,7 +4,7 @@
     "slug": "roomradarapp-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/RoomRadarIcon.png",
+    "icon": "./assets/images/RoomRadar.png",
     "scheme": "roomradarappmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,14 +14,14 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/RoomRadarIcon.png"
+        "foregroundImage": "./assets/images/RoomRadar.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/RoomRadarIcon.png"
+      "favicon": "./assets/images/RoomRadar.png"
     },
     "plugins": [
       "expo-router",
