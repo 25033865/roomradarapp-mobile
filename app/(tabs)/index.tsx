@@ -25,7 +25,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { loginUser, registerUser } from '../../authService';
+import { loginUser, registerUser, resendVerificationForCredentials } from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -33,6 +33,7 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -241,6 +242,9 @@ export default function AuthScreen() {
       forgotText: {
         fontSize: clamp(width * 0.035, 12, 14),
       },
+      resendText: {
+        fontSize: clamp(width * 0.035, 12, 14),
+      },
       primaryButton: {
         height: clamp(baseSize * 0.09, 52, 62),
         borderRadius: clamp(baseSize * 0.03, 16, 20),
@@ -289,6 +293,13 @@ export default function AuthScreen() {
   );
 
   const getAuthErrorMessage = (error: unknown): string => {
+    if (
+      error instanceof Error &&
+      (error.message === 'EMAIL_NOT_VERIFIED' || error.message === 'EMAIL_VERIFICATION_LINK_SENT')
+    ) {
+      return `A verification link has been sent to ${loginEmail.trim()}. Please verify your email before signing in.`;
+    }
+
     if (!(error instanceof FirebaseError)) {
       return 'Something went wrong. Please try again.';
     }
@@ -329,9 +340,46 @@ export default function AuthScreen() {
       await loginUser(loginEmail, loginPassword);
       router.replace('/explore');
     } catch (error) {
-      Alert.alert('Sign in failed', getAuthErrorMessage(error));
+      if (
+        error instanceof Error &&
+        (error.message === 'EMAIL_NOT_VERIFIED' || error.message === 'EMAIL_VERIFICATION_LINK_SENT')
+      ) {
+        Alert.alert('Verification Required', getAuthErrorMessage(error));
+      } else {
+        Alert.alert('Sign in failed', getAuthErrorMessage(error));
+      }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const onResendVerification = async () => {
+    if (isSubmitting || isResendingVerification) {
+      return;
+    }
+
+    if (!loginEmail.trim() || !loginPassword) {
+      Alert.alert('Missing information', 'Enter your email and password, then tap resend.');
+      return;
+    }
+
+    setIsResendingVerification(true);
+
+    try {
+      const result = await resendVerificationForCredentials(loginEmail, loginPassword);
+
+      if (result === 'already_verified') {
+        Alert.alert('Already Verified', 'Your email is already verified. You can sign in now.');
+      } else {
+        Alert.alert(
+          'Verification Email Sent',
+          `We sent a fresh verification link to ${loginEmail.trim()}. Please check your inbox.`
+        );
+      }
+    } catch (error) {
+      Alert.alert('Unable to resend', getAuthErrorMessage(error));
+    } finally {
+      setIsResendingVerification(false);
     }
   };
 
@@ -354,7 +402,23 @@ export default function AuthScreen() {
 
     try {
       await registerUser(fullName, signupEmail, signupPassword);
-      router.replace('/explore');
+      // Show verification email sent message
+      Alert.alert(
+        'Verification Email Sent',
+        `We've sent a verification link to ${signupEmail.trim()}. Please verify your email before signing in.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Switch to login mode so they can attempt to login after verification
+              setMode('login');
+              setSignupEmail('');
+              setSignupPassword('');
+              setConfirmPassword('');
+            },
+          },
+        ]
+      );
     } catch (error) {
       Alert.alert('Sign up failed', getAuthErrorMessage(error));
     } finally {
@@ -511,6 +575,16 @@ export default function AuthScreen() {
 
                 <Pressable style={styles.forgotBtn}>
                   <Text style={[styles.forgotText, responsiveStyles.forgotText]}>Forgot password?</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.resendBtn}
+                  onPress={onResendVerification}
+                  disabled={isSubmitting || isResendingVerification}
+                >
+                  <Text style={[styles.resendText, responsiveStyles.resendText]}>
+                    {isResendingVerification ? 'Sending verification link...' : 'Resend verification email'}
+                  </Text>
                 </Pressable>
 
                 <Pressable
@@ -872,6 +946,15 @@ const styles = StyleSheet.create({
     color: '#9BC2FF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  resendBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  resendText: {
+    color: '#9BC2FF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   primaryButton: {
     height: 58,
