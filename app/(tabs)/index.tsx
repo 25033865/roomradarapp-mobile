@@ -1,3 +1,4 @@
+import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
@@ -13,10 +14,14 @@ import {
     Pressable,
     ScrollView,
     StatusBar,
+    StyleProp,
     StyleSheet,
     Text,
     TextInput,
+    TextStyle,
+    useWindowDimensions,
     View,
+    ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { loginUser, registerUser } from '../../authService';
@@ -35,6 +40,9 @@ export default function AuthScreen() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  const { width, height } = useWindowDimensions();
+  const { isSmallPhone, isTablet, isLargeTablet } = getDeviceFlags(width);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
@@ -119,6 +127,165 @@ export default function AuthScreen() {
     [mode]
   );
 
+  const responsiveStyles = useMemo(() => {
+    const baseSize = Math.min(width, height);
+    const horizontalPadding = clamp(width * 0.06, 16, isLargeTablet ? 40 : 28);
+    const cardMaxWidth = isLargeTablet ? 560 : isTablet ? 520 : 480;
+    const cardWidth = Math.min(width - horizontalPadding * 2, cardMaxWidth);
+    const bubbleLargeSize = clamp(baseSize * 0.24, 130, 240);
+    const bubbleSmallSize = clamp(baseSize * 0.17, 95, 180);
+    const glowOneSize = clamp(baseSize * 0.19, 110, 200);
+    const glowTwoSize = clamp(baseSize * 0.22, 120, 220);
+    const logoSize = clamp(width * 0.46, 140, isTablet ? 260 : 210);
+    const titleSize = clamp(width * 0.088, 28, isTablet ? 44 : 36);
+    const subtitleSize = clamp(width * 0.042, 14, 18);
+    const logoHorizontalAlign: 'center' | 'flex-start' = isTablet ? 'center' : 'flex-start';
+    const textAlign: 'center' | 'left' = isTablet ? 'center' : 'left';
+    const rowDirection: 'column' | 'row' = isSmallPhone ? 'column' : 'row';
+
+    return {
+      bubbleLarge: {
+        top: clamp(height * 0.08, 40, 96),
+        right: -Math.round(bubbleLargeSize * 0.23),
+        width: bubbleLargeSize,
+        height: bubbleLargeSize,
+        borderRadius: bubbleLargeSize / 2,
+      },
+      bubbleSmall: {
+        top: clamp(height * 0.22, 130, 240),
+        left: -Math.round(bubbleSmallSize * 0.24),
+        width: bubbleSmallSize,
+        height: bubbleSmallSize,
+        borderRadius: bubbleSmallSize / 2,
+      },
+      glowOne: {
+        top: clamp(height * 0.12, 72, 138),
+        left: clamp(width * 0.08, 18, 60),
+        width: glowOneSize,
+        height: glowOneSize,
+        borderRadius: glowOneSize / 2,
+      },
+      glowTwo: {
+        bottom: clamp(height * 0.18, 104, 190),
+        right: clamp(width * 0.05, 18, 42),
+        width: glowTwoSize,
+        height: glowTwoSize,
+        borderRadius: glowTwoSize / 2,
+      },
+      scrollContent: {
+        paddingHorizontal: horizontalPadding,
+        paddingTop: clamp(height * 0.03, 18, 34),
+        paddingBottom: clamp(height * 0.04, 22, 38),
+        alignItems: 'center' as const,
+      },
+      hero: {
+        width: '100%' as const,
+        maxWidth: cardWidth,
+        marginBottom: clamp(baseSize * 0.03, 14, 24),
+      },
+      logoWrap: {
+        width: logoSize,
+        height: logoSize,
+        marginLeft: isTablet ? 0 : -Math.round(logoSize * 0.18),
+        marginBottom: -Math.round(logoSize * (isTablet ? 0.1 : 0.2)),
+        alignSelf: logoHorizontalAlign,
+        alignItems: logoHorizontalAlign,
+      },
+      title: {
+        fontSize: titleSize,
+        textAlign,
+      },
+      subtitle: {
+        fontSize: subtitleSize,
+        lineHeight: Math.round(subtitleSize * 1.45),
+        maxWidth: isTablet ? 520 : cardWidth,
+        textAlign,
+      },
+      card: {
+        width: '100%' as const,
+        maxWidth: cardWidth,
+        padding: clamp(width * 0.048, 16, 26),
+        borderRadius: clamp(baseSize * 0.045, 20, 30),
+      },
+      switchOuter: {
+        borderRadius: clamp(baseSize * 0.03, 16, 22),
+        marginBottom: clamp(baseSize * 0.03, 16, 24),
+      },
+      switchPill: {
+        borderRadius: clamp(baseSize * 0.025, 12, 18),
+      },
+      switchBtn: {
+        paddingVertical: clamp(baseSize * 0.015, 10, 14),
+      },
+      switchText: {
+        fontSize: clamp(width * 0.04, 14, 17),
+      },
+      formWrap: {
+        gap: clamp(baseSize * 0.018, 10, 14),
+        marginBottom: clamp(baseSize * 0.03, 16, 24),
+      },
+      inputWrap: {
+        minHeight: clamp(baseSize * 0.09, 52, 62),
+        borderRadius: clamp(baseSize * 0.03, 16, 20),
+        paddingHorizontal: clamp(baseSize * 0.022, 12, 16),
+      },
+      inputIconWrap: {
+        width: clamp(baseSize * 0.048, 28, 34),
+      },
+      input: {
+        fontSize: clamp(width * 0.04, 14, 17),
+        paddingVertical: clamp(baseSize * 0.025, 14, 18),
+      },
+      forgotText: {
+        fontSize: clamp(width * 0.035, 12, 14),
+      },
+      primaryButton: {
+        height: clamp(baseSize * 0.09, 52, 62),
+        borderRadius: clamp(baseSize * 0.03, 16, 20),
+        marginTop: clamp(baseSize * 0.01, 4, 10),
+      },
+      primaryButtonText: {
+        fontSize: clamp(width * 0.042, 15, 18),
+      },
+      dividerRow: {
+        marginBottom: clamp(baseSize * 0.024, 14, 20),
+      },
+      dividerText: {
+        fontSize: clamp(width * 0.033, 11, 13),
+      },
+      socialRow: {
+        flexDirection: rowDirection,
+        marginBottom: clamp(baseSize * 0.03, 16, 24),
+      },
+      socialButton: {
+        minHeight: clamp(baseSize * 0.08, 48, 58),
+        borderRadius: clamp(baseSize * 0.028, 14, 18),
+      },
+      socialText: {
+        fontSize: clamp(width * 0.038, 13, 15),
+      },
+      bottomRow: {
+        flexDirection: rowDirection,
+        gap: isSmallPhone ? 4 : 0,
+      },
+      bottomText: {
+        fontSize: clamp(width * 0.038, 13, 15),
+      },
+      bottomLink: {
+        fontSize: clamp(width * 0.038, 13, 15),
+      },
+    };
+  }, [height, isLargeTablet, isSmallPhone, isTablet, width]);
+
+  const inputFieldResponsiveProps = useMemo(
+    () => ({
+      containerStyle: responsiveStyles.inputWrap,
+      iconWrapStyle: responsiveStyles.inputIconWrap,
+      inputStyle: responsiveStyles.input,
+    }),
+    [responsiveStyles]
+  );
+
   const getAuthErrorMessage = (error: unknown): string => {
     if (!(error instanceof FirebaseError)) {
       return 'Something went wrong. Please try again.';
@@ -201,12 +368,14 @@ export default function AuthScreen() {
         <Animated.View
           style={[
             styles.bubbleLarge,
+            responsiveStyles.bubbleLarge,
             { transform: [{ translateY: bubbleTranslateY }] },
           ]}
         />
         <Animated.View
           style={[
             styles.bubbleSmall,
+            responsiveStyles.bubbleSmall,
             {
               transform: [
                 {
@@ -219,8 +388,8 @@ export default function AuthScreen() {
             },
           ]}
         />
-        <View style={styles.glowOne} />
-        <View style={styles.glowTwo} />
+        <View style={[styles.glowOne, responsiveStyles.glowOne]} />
+        <View style={[styles.glowTwo, responsiveStyles.glowTwo]} />
       </View>
 
       <KeyboardAvoidingView
@@ -228,59 +397,61 @@ export default function AuthScreen() {
         style={styles.flex}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, responsiveStyles.scrollContent]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <Animated.View
             style={[
               styles.hero,
+              responsiveStyles.hero,
               {
                 opacity: fadeAnim,
                 transform: [{ translateY: slideAnim }],
               },
             ]}
           >
-            <View style={styles.logoWrap}>
+            <View style={[styles.logoWrap, responsiveStyles.logoWrap]}>
               <Image
                 source={require('../../assets/images/RoomRadar.png')}
                 style={styles.brandIcon}
                 resizeMode="contain"
               />
             </View>
-            <Text style={styles.title}>
+            <Text style={[styles.title, responsiveStyles.title]}>
               {mode === 'login' ? 'Welcome Back' : 'Create Account'}
             </Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text style={[styles.subtitle, responsiveStyles.subtitle]}>{subtitle}</Text>
           </Animated.View>
 
           <Animated.View
             style={[
               styles.card,
+              responsiveStyles.card,
               {
                 opacity: fadeAnim,
                 transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
               },
             ]}
           >
-            <View style={styles.switchOuter}>
-              <Animated.View style={[styles.switchPill, { left: pillLeft }]} />
+            <View style={[styles.switchOuter, responsiveStyles.switchOuter]}>
+              <Animated.View style={[styles.switchPill, responsiveStyles.switchPill, { left: pillLeft }]} />
 
-              <Pressable style={styles.switchBtn} onPress={() => setMode('login')}>
-                <Animated.Text style={[styles.switchText, { opacity: loginOpacity }]}>
+              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => setMode('login')}>
+                <Animated.Text style={[styles.switchText, responsiveStyles.switchText, { opacity: loginOpacity }]}>
                   Sign In
                 </Animated.Text>
               </Pressable>
 
-              <Pressable style={styles.switchBtn} onPress={() => setMode('signup')}>
-                <Animated.Text style={[styles.switchText, { opacity: signupOpacity }]}>
+              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => setMode('signup')}>
+                <Animated.Text style={[styles.switchText, responsiveStyles.switchText, { opacity: signupOpacity }]}>
                   Sign Up
                 </Animated.Text>
               </Pressable>
             </View>
 
             {mode === 'login' ? (
-              <View style={styles.formWrap}>
+              <View style={[styles.formWrap, responsiveStyles.formWrap]}>
                 <InputField
                   icon="mail-outline"
                   placeholder="Email address"
@@ -288,6 +459,7 @@ export default function AuthScreen() {
                   onChangeText={setLoginEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  {...inputFieldResponsiveProps}
                 />
 
                 <InputField
@@ -299,18 +471,23 @@ export default function AuthScreen() {
                   autoCapitalize="none"
                   rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   onRightPress={() => setShowPassword((prev) => !prev)}
+                  {...inputFieldResponsiveProps}
                 />
 
                 <Pressable style={styles.forgotBtn}>
-                  <Text style={styles.forgotText}>Forgot password?</Text>
+                  <Text style={[styles.forgotText, responsiveStyles.forgotText]}>Forgot password?</Text>
                 </Pressable>
 
                 <Pressable
-                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+                  style={[
+                    styles.primaryButton,
+                    responsiveStyles.primaryButton,
+                    isSubmitting && styles.primaryButtonDisabled,
+                  ]}
                   onPress={onLogin}
                   disabled={isSubmitting}
                 >
-                  <Text style={styles.primaryButtonText}>
+                  <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
                     {isSubmitting ? 'Signing In...' : 'Sign In'}
                   </Text>
                   {isSubmitting ? (
@@ -321,12 +498,13 @@ export default function AuthScreen() {
                 </Pressable>
               </View>
             ) : (
-              <View style={styles.formWrap}>
+              <View style={[styles.formWrap, responsiveStyles.formWrap]}>
                 <InputField
                   icon="person-outline"
                   placeholder="Full name"
                   value={fullName}
                   onChangeText={setFullName}
+                  {...inputFieldResponsiveProps}
                 />
 
                 <InputField
@@ -336,6 +514,7 @@ export default function AuthScreen() {
                   onChangeText={setSignupEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  {...inputFieldResponsiveProps}
                 />
 
                 <InputField
@@ -347,6 +526,7 @@ export default function AuthScreen() {
                   autoCapitalize="none"
                   rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   onRightPress={() => setShowPassword((prev) => !prev)}
+                  {...inputFieldResponsiveProps}
                 />
 
                 <InputField
@@ -358,14 +538,19 @@ export default function AuthScreen() {
                   autoCapitalize="none"
                   rightIcon={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
                   onRightPress={() => setShowConfirmPassword((prev) => !prev)}
+                  {...inputFieldResponsiveProps}
                 />
 
                 <Pressable
-                  style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+                  style={[
+                    styles.primaryButton,
+                    responsiveStyles.primaryButton,
+                    isSubmitting && styles.primaryButtonDisabled,
+                  ]}
                   onPress={onSignup}
                   disabled={isSubmitting}
                 >
-                  <Text style={styles.primaryButtonText}>
+                  <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
                     {isSubmitting ? 'Creating...' : 'Create Account'}
                   </Text>
                   {isSubmitting ? (
@@ -377,25 +562,35 @@ export default function AuthScreen() {
               </View>
             )}
 
-            <View style={styles.dividerRow}>
+            <View style={[styles.dividerRow, responsiveStyles.dividerRow]}>
               <View style={styles.divider} />
-              <Text style={styles.dividerText}>or continue with</Text>
+              <Text style={[styles.dividerText, responsiveStyles.dividerText]}>or continue with</Text>
               <View style={styles.divider} />
             </View>
 
-            <View style={styles.socialRow}>
-              <SocialButton icon="logo-google" label="Google" />
-              <SocialButton icon="logo-apple" label="Apple" />
+            <View style={[styles.socialRow, responsiveStyles.socialRow]}>
+              <SocialButton
+                icon="logo-google"
+                label="Google"
+                buttonStyle={responsiveStyles.socialButton}
+                textStyle={responsiveStyles.socialText}
+              />
+              <SocialButton
+                icon="logo-apple"
+                label="Apple"
+                buttonStyle={responsiveStyles.socialButton}
+                textStyle={responsiveStyles.socialText}
+              />
             </View>
 
-            <View style={styles.bottomRow}>
-              <Text style={styles.bottomText}>
+            <View style={[styles.bottomRow, responsiveStyles.bottomRow]}>
+              <Text style={[styles.bottomText, responsiveStyles.bottomText]}>
                 {mode === 'login'
                   ? "Don't have an account?"
                   : 'Already have an account?'}
               </Text>
               <Pressable onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}>
-                <Text style={styles.bottomLink}>
+                <Text style={[styles.bottomLink, responsiveStyles.bottomLink]}>
                   {mode === 'login' ? ' Sign Up' : ' Sign In'}
                 </Text>
               </Pressable>
@@ -417,6 +612,9 @@ type InputFieldProps = {
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightPress?: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
+  iconWrapStyle?: StyleProp<ViewStyle>;
+  inputStyle?: StyleProp<TextStyle>;
 };
 
 function InputField({
@@ -429,18 +627,21 @@ function InputField({
   autoCapitalize = 'sentences',
   rightIcon,
   onRightPress,
+  containerStyle,
+  iconWrapStyle,
+  inputStyle,
 }: InputFieldProps) {
   const inputModeKey = secureTextEntry ? 'secure' : 'plain';
 
   return (
-    <View style={styles.inputWrap}>
-      <View style={styles.inputIconWrap}>
+    <View style={[styles.inputWrap, containerStyle]}>
+      <View style={[styles.inputIconWrap, iconWrapStyle]}>
         <Ionicons name={icon} size={18} color="#9FB0C7" />
       </View>
 
       <TextInput
         key={inputModeKey}
-        style={styles.input}
+        style={[styles.input, inputStyle]}
         placeholder={placeholder}
         placeholderTextColor="#7C8CA3"
         value={value}
@@ -462,13 +663,15 @@ function InputField({
 type SocialButtonProps = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  buttonStyle?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 };
 
-function SocialButton({ icon, label }: SocialButtonProps) {
+function SocialButton({ icon, label, buttonStyle, textStyle }: SocialButtonProps) {
   return (
-    <Pressable style={styles.socialButton}>
+    <Pressable style={[styles.socialButton, buttonStyle]}>
       <Ionicons name={icon} size={18} color="#EAF2FF" />
-      <Text style={styles.socialText}>{label}</Text>
+      <Text style={[styles.socialText, textStyle]}>{label}</Text>
     </Pressable>
   );
 }

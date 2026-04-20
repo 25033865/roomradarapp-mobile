@@ -1,24 +1,35 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
 import { ExternalLink } from '@/components/external-link';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Collapsible } from '@/components/ui/collapsible';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Fonts } from '@/constants/theme';
 
 export default function TabTwoScreen() {
+  const { width } = useWindowDimensions();
+  const { isTablet } = getDeviceFlags(width);
+  const headerIconSize = clamp(width * 0.66, 220, isTablet ? 420 : 340);
+  const headerImageStyle = {
+    ...styles.headerImage,
+    bottom: -Math.round(headerIconSize * 0.3),
+    left: -Math.round(headerIconSize * 0.11),
+  };
+  const logoSize = clamp(width * 0.24, 88, 150);
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
       headerImage={
         <IconSymbol
-          size={310}
+          size={headerIconSize}
           color="#808080"
           name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
+          style={headerImageStyle}
         />
       }>
       <ThemedView style={styles.titleContainer}>
@@ -59,7 +70,7 @@ export default function TabTwoScreen() {
         </ThemedText>
         <Image
           source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
+          style={{ width: logoSize, height: logoSize, alignSelf: 'center' }}
         />
         <ExternalLink href="https://reactnative.dev/docs/images">
           <ThemedText type="link">Learn more</ThemedText>
@@ -101,8 +112,6 @@ export default function TabTwoScreen() {
 const styles = StyleSheet.create({
   headerImage: {
     color: '#808080',
-    bottom: -90,
-    left: -35,
     position: 'absolute',
   },
   titleContainer: {
