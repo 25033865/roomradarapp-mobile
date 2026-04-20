@@ -2,26 +2,27 @@ import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Easing,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StatusBar,
-    StyleProp,
-    StyleSheet,
-    Text,
-    TextInput,
-    TextStyle,
-    useWindowDimensions,
-    View,
-    ViewStyle,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  KeyboardAvoidingView,
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextStyle,
+  useWindowDimensions,
+  View,
+  ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { loginUser, registerUser } from '../../authService';
@@ -40,6 +41,7 @@ export default function AuthScreen() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [switchTrackWidth, setSwitchTrackWidth] = useState(0);
 
   const { width, height } = useWindowDimensions();
   const { isSmallPhone, isTablet, isLargeTablet } = getDeviceFlags(width);
@@ -95,7 +97,7 @@ export default function AuthScreen() {
       toValue: mode === 'login' ? 0 : 1,
       duration: 320,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
   }, [mode, switchAnim]);
 
@@ -104,9 +106,9 @@ export default function AuthScreen() {
     outputRange: [0, -18],
   });
 
-  const pillLeft = switchAnim.interpolate({
+  const switchTranslateX = switchAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['2%', '51%'],
+    outputRange: [0, switchTrackWidth * 0.49],
   });
 
   const loginOpacity = switchAnim.interpolate({
@@ -360,6 +362,21 @@ export default function AuthScreen() {
     }
   };
 
+  const loginTabTextStyle = mode === 'login' ? styles.switchTextActive : styles.switchTextInactive;
+  const signupTabTextStyle = mode === 'signup' ? styles.switchTextActive : styles.switchTextInactive;
+
+  const onSwitchOuterLayout = useCallback((event: LayoutChangeEvent) => {
+    const measuredWidth = event.nativeEvent.layout.width;
+
+    setSwitchTrackWidth((prevWidth) => {
+      if (Math.abs(prevWidth - measuredWidth) < 0.5) {
+        return prevWidth;
+      }
+
+      return measuredWidth;
+    });
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
@@ -434,17 +451,35 @@ export default function AuthScreen() {
               },
             ]}
           >
-            <View style={[styles.switchOuter, responsiveStyles.switchOuter]}>
-              <Animated.View style={[styles.switchPill, responsiveStyles.switchPill, { left: pillLeft }]} />
+            <View style={[styles.switchOuter, responsiveStyles.switchOuter]} onLayout={onSwitchOuterLayout}>
+              <Animated.View
+                style={[
+                  styles.switchPill,
+                  responsiveStyles.switchPill,
+                  { transform: [{ translateX: switchTranslateX }] },
+                ]}
+              />
 
               <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => setMode('login')}>
-                <Animated.Text style={[styles.switchText, responsiveStyles.switchText, { opacity: loginOpacity }]}>
+                <Animated.Text
+                  style={[
+                    styles.switchText,
+                    responsiveStyles.switchText,
+                    loginTabTextStyle,
+                    { opacity: loginOpacity },
+                  ]}>
                   Sign In
                 </Animated.Text>
               </Pressable>
 
               <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => setMode('signup')}>
-                <Animated.Text style={[styles.switchText, responsiveStyles.switchText, { opacity: signupOpacity }]}>
+                <Animated.Text
+                  style={[
+                    styles.switchText,
+                    responsiveStyles.switchText,
+                    signupTabTextStyle,
+                    { opacity: signupOpacity },
+                  ]}>
                   Sign Up
                 </Animated.Text>
               </Pressable>
@@ -783,6 +818,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     bottom: 4,
+    left: '2%',
     width: '47%',
     borderRadius: 14,
     backgroundColor: '#EAF2FF',
@@ -795,9 +831,14 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   switchText: {
-    color: '#0A1020',
     fontSize: 15,
     fontWeight: '700',
+  },
+  switchTextActive: {
+    color: '#0A1020',
+  },
+  switchTextInactive: {
+    color: '#EAF2FF',
   },
   formWrap: {
     gap: 12,

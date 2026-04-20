@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "icon": "./assets/images/RoomRadarHomeIcon.png",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "CADisableMinimumFrameDurationOnPhone": true,
+        "UIPreferredDisplayModeName": "HighFrameRate"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +22,8 @@
         "foregroundImage": "./assets/images/RoomRadarHomeIcon.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "enablePreferredFrameRate": true
     },
     "web": {
       "output": "static",
