@@ -4,7 +4,7 @@
     "slug": "roomradarapp-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/RoomRadar.png",
+    "icon": "./assets/images/RoomRadarHomeIcon.png",
     "scheme": "roomradarappmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -27,7 +27,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/RoomRadar.png"
+      "favicon": "./assets/images/RoomRadarHomeIcon.png"
     },
     "plugins": [
       "expo-router",
