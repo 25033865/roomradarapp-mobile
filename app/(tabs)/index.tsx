@@ -28,9 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../authprovider';
 import {
   loginUser,
-  logoutUser,
   registerUser,
-  requestEmailOtp,
   requestPasswordReset,
   resendVerificationForCredentials,
   verifyEmailOtp,
