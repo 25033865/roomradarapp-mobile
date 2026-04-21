@@ -2,6 +2,7 @@ import {
     createUserWithEmailAndPassword,
     reload,
     sendEmailVerification,
+    sendPasswordResetEmail,
     signInWithEmailAndPassword,
     signOut,
     updateProfile,
@@ -67,6 +68,16 @@ export const sendVerificationEmail = async (): Promise<void> => {
         throw new Error('No user logged in');
     }
     await sendEmailVerification(auth.currentUser);
+};
+
+export const requestPasswordReset = async (email: string): Promise<void> => {
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+        throw new Error('MISSING_EMAIL');
+    }
+
+    await sendPasswordResetEmail(auth, normalizedEmail);
 };
 
 export const resendVerificationForCredentials = async (

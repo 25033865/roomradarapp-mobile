@@ -25,7 +25,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { loginUser, registerUser, resendVerificationForCredentials } from '../../authService';
+import { loginUser, registerUser, requestPasswordReset, resendVerificationForCredentials } from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -34,6 +34,7 @@ export default function AuthScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -293,6 +294,10 @@ export default function AuthScreen() {
   );
 
   const getAuthErrorMessage = (error: unknown): string => {
+    if (error instanceof Error && error.message === 'MISSING_EMAIL') {
+      return 'Enter your email address first.';
+    }
+
     if (
       error instanceof Error &&
       (error.message === 'EMAIL_NOT_VERIFIED' || error.message === 'EMAIL_VERIFICATION_LINK_SENT')
@@ -319,6 +324,8 @@ export default function AuthScreen() {
         return 'Password should be at least 6 characters.';
       case 'auth/network-request-failed':
         return 'Network error. Check your connection and try again.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please wait a bit and try again.';
       default:
         return error.message || 'Authentication failed. Please try again.';
     }
@@ -354,7 +361,7 @@ export default function AuthScreen() {
   };
 
   const onResendVerification = async () => {
-    if (isSubmitting || isResendingVerification) {
+    if (isSubmitting || isResendingVerification || isSendingReset) {
       return;
     }
 
@@ -380,6 +387,31 @@ export default function AuthScreen() {
       Alert.alert('Unable to resend', getAuthErrorMessage(error));
     } finally {
       setIsResendingVerification(false);
+    }
+  };
+
+  const onForgotPassword = async () => {
+    if (isSubmitting || isResendingVerification || isSendingReset) {
+      return;
+    }
+
+    if (!loginEmail.trim()) {
+      Alert.alert('Missing email', 'Enter your email address first.');
+      return;
+    }
+
+    setIsSendingReset(true);
+
+    try {
+      await requestPasswordReset(loginEmail);
+      Alert.alert(
+        'Reset Email Sent',
+        `We sent a password reset link to ${loginEmail.trim()}. Please check your inbox.`
+      );
+    } catch (error) {
+      Alert.alert('Unable to reset password', getAuthErrorMessage(error));
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -573,8 +605,14 @@ export default function AuthScreen() {
                   {...inputFieldResponsiveProps}
                 />
 
-                <Pressable style={styles.forgotBtn}>
-                  <Text style={[styles.forgotText, responsiveStyles.forgotText]}>Forgot password?</Text>
+                <Pressable
+                  style={styles.forgotBtn}
+                  onPress={onForgotPassword}
+                  disabled={isSubmitting || isResendingVerification || isSendingReset}
+                >
+                  <Text style={[styles.forgotText, responsiveStyles.forgotText]}>
+                    {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
+                  </Text>
                 </Pressable>
 
                 <Pressable
