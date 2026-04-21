@@ -25,10 +25,12 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../authprovider';
 import { loginUser, registerUser, requestPasswordReset, resendVerificationForCredentials } from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
+  const { user, initializing, isEmailVerified } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -102,6 +104,12 @@ export default function AuthScreen() {
       useNativeDriver: true,
     }).start();
   }, [mode, switchAnim]);
+
+  useEffect(() => {
+    if (!initializing && user && isEmailVerified) {
+      router.replace('/explore');
+    }
+  }, [initializing, isEmailVerified, router, user]);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -473,6 +481,16 @@ export default function AuthScreen() {
     });
   }, []);
 
+  if (initializing) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#EAF2FF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
@@ -830,6 +848,11 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   background: {
     ...StyleSheet.absoluteFillObject,

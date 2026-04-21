@@ -1,4 +1,6 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Platform, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { ExternalLink } from '@/components/external-link';
@@ -9,8 +11,11 @@ import { Collapsible } from '@/components/ui/collapsible';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Fonts } from '@/constants/theme';
+import { useAuth } from '../../authprovider';
 
 export default function TabTwoScreen() {
+  const router = useRouter();
+  const { user, initializing, isEmailVerified } = useAuth();
   const { width } = useWindowDimensions();
   const { isTablet } = getDeviceFlags(width);
   const headerIconSize = clamp(width * 0.66, 220, isTablet ? 420 : 340);
@@ -20,6 +25,20 @@ export default function TabTwoScreen() {
     left: -Math.round(headerIconSize * 0.11),
   };
   const logoSize = clamp(width * 0.24, 88, 150);
+
+  useEffect(() => {
+    if (!initializing && (!user || !isEmailVerified)) {
+      router.replace('/');
+    }
+  }, [initializing, isEmailVerified, router, user]);
+
+  if (initializing || !user || !isEmailVerified) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ThemedText>Checking your session...</ThemedText>
+      </ThemedView>
+    );
+  }
 
   return (
     <ParallaxScrollView
@@ -117,5 +136,11 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     gap: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
 });
