@@ -26,7 +26,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../authprovider';
-import { loginUser, logoutUser, registerUser, requestPasswordReset, resendVerificationForCredentials } from '../../authService';
+import {
+  loginUser,
+  logoutUser,
+  registerUser,
+  requestEmailOtp,
+  requestPasswordReset,
+  resendVerificationForCredentials,
+  verifyEmailOtp,
+} from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -38,7 +46,7 @@ export default function AuthScreen() {
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [isTwoStepPending, setIsTwoStepPending] = useState(false);
-  const [twoStepCode, setTwoStepCode] = useState('');
+  const [twoStepChallengeId, setTwoStepChallengeId] = useState('');
   const [twoStepCodeInput, setTwoStepCodeInput] = useState('');
   const [twoStepCodeExpiry, setTwoStepCodeExpiry] = useState<number | null>(null);
 
@@ -307,32 +315,29 @@ export default function AuthScreen() {
 
   const clearTwoStepState = useCallback(() => {
     setIsTwoStepPending(false);
-    setTwoStepCode('');
+    setTwoStepChallengeId('');
     setTwoStepCodeInput('');
     setTwoStepCodeExpiry(null);
   }, []);
 
-  const beginTwoStepChallenge = useCallback(() => {
-    const generatedCode = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-
+  const beginTwoStepChallenge = useCallback((challengeId: string, expiresAt?: number) => {
     setIsTwoStepPending(true);
-    setTwoStepCode(generatedCode);
+    setTwoStepChallengeId(challengeId);
     setTwoStepCodeInput('');
-    setTwoStepCodeExpiry(expiresAt);
+    setTwoStepCodeExpiry(expiresAt ?? null);
 
     Alert.alert(
       'Two-Step Verification',
-      `Enter this 6-digit code to finish signing in: ${generatedCode}`
+      `A 6-digit verification code was sent to ${loginEmail.trim()}. Enter it to finish signing in.`
     );
-  }, []);
+  }, [loginEmail]);
 
   const onVerifyTwoStepCode = async () => {
     if (isSubmitting) {
       return;
     }
 
-    if (!isTwoStepPending || !twoStepCode) {
+    if (!isTwoStepPending || !twoStepChallengeId) {
       return;
     }
 
@@ -342,19 +347,14 @@ export default function AuthScreen() {
     }
 
     if (twoStepCodeExpiry && Date.now() > twoStepCodeExpiry) {
-      beginTwoStepChallenge();
-      Alert.alert('Code expired', 'We generated a new verification code.');
-      return;
-    }
-
-    if (twoStepCodeInput.trim() !== twoStepCode) {
-      Alert.alert('Invalid code', 'The verification code is incorrect. Please try again.');
+      Alert.alert('Code expired', 'Your verification code has expired. Request a new code.');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
+      await verifyEmailOtp(loginEmail, twoStepCodeInput, twoStepChallengeId);
       await loginUser(loginEmail, loginPassword);
       clearTwoStepState();
       router.replace('/homepage');
@@ -365,17 +365,47 @@ export default function AuthScreen() {
     }
   };
 
-  const onResendTwoStepCode = () => {
+  const onResendTwoStepCode = async () => {
     if (isSubmitting || !isTwoStepPending) {
       return;
     }
 
-    beginTwoStepChallenge();
+    if (!loginEmail.trim()) {
+      Alert.alert('Missing email', 'Enter your email address first.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const otpChallenge = await requestEmailOtp(loginEmail);
+      beginTwoStepChallenge(otpChallenge.challengeId, otpChallenge.expiresAt);
+    } catch (error) {
+      Alert.alert('Unable to resend code', getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getAuthErrorMessage = (error: unknown): string => {
     if (error instanceof Error && error.message === 'MISSING_EMAIL') {
       return 'Enter your email address first.';
+    }
+
+    if (error instanceof Error && error.message === 'MISSING_OTP_CODE') {
+      return 'Enter the verification code sent to your email.';
+    }
+
+    if (error instanceof Error && error.message === 'OTP_ENDPOINTS_NOT_CONFIGURED') {
+      return 'Email OTP is not configured yet. Set EXPO_PUBLIC_OTP_REQUEST_URL and EXPO_PUBLIC_OTP_VERIFY_URL.';
+    }
+
+    if (error instanceof Error && error.message === 'OTP_REQUEST_FAILED') {
+      return 'Unable to send verification code by email right now. Please try again.';
+    }
+
+    if (error instanceof Error && error.message === 'OTP_INVALID_OR_EXPIRED') {
+      return 'That verification code is invalid or expired. Request a new one and try again.';
     }
 
     if (
@@ -426,7 +456,8 @@ export default function AuthScreen() {
     try {
       await loginUser(loginEmail, loginPassword);
       await logoutUser();
-      beginTwoStepChallenge();
+      const otpChallenge = await requestEmailOtp(loginEmail);
+      beginTwoStepChallenge(otpChallenge.challengeId, otpChallenge.expiresAt);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -717,7 +748,7 @@ export default function AuthScreen() {
                       {...inputFieldResponsiveProps}
                     />
                     <Pressable style={styles.resendBtn} onPress={onResendTwoStepCode} disabled={isSubmitting}>
-                      <Text style={[styles.resendText, responsiveStyles.resendText]}>Resend verification code</Text>
+                      <Text style={[styles.resendText, responsiveStyles.resendText]}>Resend code to email</Text>
                     </Pressable>
                   </>
                 ) : null}
@@ -756,7 +787,7 @@ export default function AuthScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
-                    {isSubmitting ? 'Signing In...' : isTwoStepPending ? 'Verify Code' : 'Sign In'}
+                    {isSubmitting ? 'Signing In...' : isTwoStepPending ? 'Verify Email Code' : 'Sign In'}
                   </Text>
                   {isSubmitting ? (
                     <ActivityIndicator size="small" color="#0B1220" />
