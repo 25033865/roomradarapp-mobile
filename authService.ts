@@ -1,28 +1,21 @@
 import {
     createUserWithEmailAndPassword,
+    isSignInWithEmailLink,
     reload,
     sendEmailVerification,
     sendPasswordResetEmail,
+    sendSignInLinkToEmail,
     signInWithEmailAndPassword,
+    signInWithEmailLink,
     signOut,
     updateProfile,
     User,
 } from 'firebase/auth';
 import { auth } from './firebaseConfig';
 
-type EmailOtpRequestResult = {
-    challengeId: string;
-    expiresAt?: number;
-};
-
-const otpRequestUrl = process.env.EXPO_PUBLIC_OTP_REQUEST_URL;
-const otpVerifyUrl = process.env.EXPO_PUBLIC_OTP_VERIFY_URL;
-
-const ensureOtpEndpointsConfigured = (): void => {
-    if (!otpRequestUrl || !otpVerifyUrl) {
-        throw new Error('OTP_ENDPOINTS_NOT_CONFIGURED');
-    }
-};
+const emailLoginContinueUrl =
+    process.env.EXPO_PUBLIC_EMAIL_LOGIN_CONTINUE_URL ||
+    'https://roomradarapp-50fb1.firebaseapp.com/login-approval';
 
 export const registerUser = async (
     username: string,
@@ -122,77 +115,75 @@ export const checkEmailVerification = async (): Promise<boolean> => {
     return auth.currentUser.emailVerified;
 };
 
-export const requestEmailOtp = async (email: string): Promise<EmailOtpRequestResult> => {
-    const normalizedEmail = email.trim();
-
-    if (!normalizedEmail) {
-        throw new Error('MISSING_EMAIL');
-    }
-
-    ensureOtpEndpointsConfigured();
-
-    const response = await fetch(otpRequestUrl as string, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: normalizedEmail }),
-    });
-
-    if (!response.ok) {
-        throw new Error('OTP_REQUEST_FAILED');
-    }
-
-    const payload = (await response.json()) as {
-        challengeId?: string;
-        expiresAt?: number;
-    };
-
-    if (!payload.challengeId) {
-        throw new Error('OTP_REQUEST_FAILED');
-    }
-
-    return {
-        challengeId: payload.challengeId,
-        expiresAt: payload.expiresAt,
-    };
-};
-
-export const verifyEmailOtp = async (
+export const startEmailLoginVerification = async (
     email: string,
-    code: string,
-    challengeId: string
+    password: string
 ): Promise<void> => {
     const normalizedEmail = email.trim();
-    const normalizedCode = code.trim();
 
     if (!normalizedEmail) {
         throw new Error('MISSING_EMAIL');
     }
 
-    if (!normalizedCode) {
-        throw new Error('MISSING_OTP_CODE');
+    if (!password) {
+        throw new Error('MISSING_PASSWORD');
     }
 
-    if (!challengeId.trim()) {
-        throw new Error('MISSING_OTP_CHALLENGE');
+    const userCredential = await signInWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        password
+    );
+
+    try {
+        await reload(userCredential.user);
+
+        if (!userCredential.user.emailVerified) {
+            await sendEmailVerification(userCredential.user);
+            throw new Error('EMAIL_VERIFICATION_LINK_SENT');
+        }
+
+        await sendSignInLinkToEmail(auth, normalizedEmail, {
+            url: emailLoginContinueUrl,
+            handleCodeInApp: true,
+        });
+    } finally {
+        await signOut(auth);
+    }
+};
+
+export const completeEmailLoginVerification = async (
+    email: string,
+    emailLink: string
+): Promise<User> => {
+    const normalizedEmail = email.trim();
+    const normalizedEmailLink = emailLink.trim();
+
+    if (!normalizedEmail) {
+        throw new Error('MISSING_EMAIL');
     }
 
-    ensureOtpEndpointsConfigured();
-
-    const response = await fetch(otpVerifyUrl as string, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            email: normalizedEmail,
-            code: normalizedCode,
-            challengeId,
-        }),
-    });
-
-    if (!response.ok) {
-        throw new Error('OTP_INVALID_OR_EXPIRED');
+    if (!normalizedEmailLink) {
+        throw new Error('MISSING_EMAIL_LOGIN_LINK');
     }
+
+    if (!isSignInWithEmailLink(auth, normalizedEmailLink)) {
+        throw new Error('INVALID_EMAIL_LOGIN_LINK');
+    }
+
+    const userCredential = await signInWithEmailLink(
+        auth,
+        normalizedEmail,
+        normalizedEmailLink
+    );
+
+    await reload(userCredential.user);
+
+    if (!userCredential.user.emailVerified) {
+        await sendEmailVerification(userCredential.user);
+        await signOut(auth);
+        throw new Error('EMAIL_VERIFICATION_LINK_SENT');
+    }
+
+    return userCredential.user;
 };

@@ -1,5 +1,7 @@
 import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,11 +29,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../authprovider';
 import {
-  loginUser,
+  completeEmailLoginVerification,
   registerUser,
   requestPasswordReset,
   resendVerificationForCredentials,
-  verifyEmailOtp,
+  startEmailLoginVerification,
 } from '../../authService';
 
 export default function AuthScreen() {
@@ -43,10 +45,11 @@ export default function AuthScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
-  const [isTwoStepPending, setIsTwoStepPending] = useState(false);
-  const [twoStepChallengeId, setTwoStepChallengeId] = useState('');
-  const [twoStepCodeInput, setTwoStepCodeInput] = useState('');
-  const [twoStepCodeExpiry, setTwoStepCodeExpiry] = useState<number | null>(null);
+  const [isEmailLoginVerificationPending, setIsEmailLoginVerificationPending] = useState(false);
+  const [pendingLoginEmail, setPendingLoginEmail] = useState('');
+
+  const isProcessingEmailLinkRef = useRef(false);
+  const lastHandledEmailLinkRef = useRef<string | null>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -65,6 +68,8 @@ export default function AuthScreen() {
   const scaleAnim = useRef(new Animated.Value(0.96)).current;
   const floatingAnim = useRef(new Animated.Value(0)).current;
   const switchAnim = useRef(new Animated.Value(0)).current;
+
+  const PENDING_EMAIL_LOGIN_KEY = 'pending-email-login-email';
 
   useEffect(() => {
     Animated.parallel([
@@ -116,10 +121,10 @@ export default function AuthScreen() {
   }, [mode, switchAnim]);
 
   useEffect(() => {
-    if (!initializing && user && isEmailVerified && !isTwoStepPending) {
+    if (!initializing && user && isEmailVerified) {
       router.replace('/homepage');
     }
-  }, [initializing, isEmailVerified, isTwoStepPending, router, user]);
+  }, [initializing, isEmailVerified, router, user]);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -311,106 +316,163 @@ export default function AuthScreen() {
     [responsiveStyles]
   );
 
-  const clearTwoStepState = useCallback(() => {
-    setIsTwoStepPending(false);
-    setTwoStepChallengeId('');
-    setTwoStepCodeInput('');
-    setTwoStepCodeExpiry(null);
+  const clearEmailLoginVerificationState = useCallback(() => {
+    setIsEmailLoginVerificationPending(false);
+    setPendingLoginEmail('');
+    void AsyncStorage.removeItem(PENDING_EMAIL_LOGIN_KEY);
   }, []);
 
-  const beginTwoStepChallenge = useCallback((challengeId: string, expiresAt?: number) => {
-    setIsTwoStepPending(true);
-    setTwoStepChallengeId(challengeId);
-    setTwoStepCodeInput('');
-    setTwoStepCodeExpiry(expiresAt ?? null);
+  useEffect(() => {
+    let isMounted = true;
 
-    Alert.alert(
-      'Two-Step Verification',
-      `A 6-digit verification code was sent to ${loginEmail.trim()}. Enter it to finish signing in.`
-    );
-  }, [loginEmail]);
+    const hydratePendingEmailLogin = async () => {
+      const savedPendingEmail = await AsyncStorage.getItem(PENDING_EMAIL_LOGIN_KEY);
 
-  const onVerifyTwoStepCode = async () => {
-    if (isSubmitting) {
-      return;
+      if (!isMounted || !savedPendingEmail) {
+        return;
+      }
+
+      setPendingLoginEmail(savedPendingEmail);
+      setIsEmailLoginVerificationPending(true);
+      setLoginEmail((currentEmail) => (currentEmail.trim() ? currentEmail : savedPendingEmail));
+    };
+
+    void hydratePendingEmailLogin();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const extractEmailLinkCandidates = useCallback((incomingUrl: string): string[] => {
+    const candidates = new Set<string>();
+
+    if (!incomingUrl) {
+      return [];
     }
 
-    if (!isTwoStepPending || !twoStepChallengeId) {
-      return;
+    const addCandidate = (value: string | null | undefined) => {
+      if (!value) {
+        return;
+      }
+
+      candidates.add(value);
+
+      try {
+        const decoded = decodeURIComponent(value);
+        candidates.add(decoded);
+      } catch {
+        // Ignore invalid URI component decoding.
+      }
+    };
+
+    addCandidate(incomingUrl);
+
+    const parsed = Linking.parse(incomingUrl);
+    const queryParams = parsed.queryParams ?? {};
+
+    const nestedLink = queryParams.link;
+    const deepLinkId = queryParams.deep_link_id;
+
+    if (typeof nestedLink === 'string') {
+      addCandidate(nestedLink);
     }
 
-    if (!twoStepCodeInput.trim()) {
-      Alert.alert('Missing code', 'Please enter the 6-digit verification code.');
-      return;
+    if (typeof deepLinkId === 'string') {
+      addCandidate(deepLinkId);
     }
 
-    if (twoStepCodeExpiry && Date.now() > twoStepCodeExpiry) {
-      Alert.alert('Code expired', 'Your verification code has expired. Request a new code.');
-      return;
-    }
+    return Array.from(candidates);
+  }, []);
 
-    setIsSubmitting(true);
+  const tryCompleteEmailLoginFromUrl = useCallback(
+    async (incomingUrl: string | null | undefined) => {
+      if (!incomingUrl || !isEmailLoginVerificationPending || !pendingLoginEmail.trim()) {
+        return;
+      }
 
-    try {
-      await verifyEmailOtp(loginEmail, twoStepCodeInput, twoStepChallengeId);
-      await loginUser(loginEmail, loginPassword);
-      clearTwoStepState();
-      router.replace('/homepage');
-    } catch (error) {
-      Alert.alert('Sign in failed', getAuthErrorMessage(error));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      if (isProcessingEmailLinkRef.current || lastHandledEmailLinkRef.current === incomingUrl) {
+        return;
+      }
 
-  const onResendTwoStepCode = async () => {
-    if (isSubmitting || !isTwoStepPending) {
-      return;
-    }
+      const candidates = extractEmailLinkCandidates(incomingUrl);
 
-    if (!loginEmail.trim()) {
-      Alert.alert('Missing email', 'Enter your email address first.');
-      return;
-    }
+      if (candidates.length === 0) {
+        return;
+      }
 
-    setIsSubmitting(true);
+      isProcessingEmailLinkRef.current = true;
+      setIsSubmitting(true);
 
-    try {
-      const otpChallenge = await requestEmailOtp(loginEmail);
-      beginTwoStepChallenge(otpChallenge.challengeId, otpChallenge.expiresAt);
-    } catch (error) {
-      Alert.alert('Unable to resend code', getAuthErrorMessage(error));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      let completionError: unknown = null;
 
-  const getAuthErrorMessage = (error: unknown): string => {
+      try {
+        for (const candidate of candidates) {
+          try {
+            await completeEmailLoginVerification(pendingLoginEmail, candidate);
+            lastHandledEmailLinkRef.current = incomingUrl;
+            clearEmailLoginVerificationState();
+            router.replace('/homepage');
+            return;
+          } catch (error) {
+            completionError = error;
+          }
+        }
+
+        const fallbackMessage =
+          completionError instanceof Error && completionError.message === 'INVALID_EMAIL_LOGIN_LINK'
+            ? 'That email sign-in link is invalid. Request a new one and try again.'
+            : 'Could not verify the email sign-in link. Request a new verification email and try again.';
+
+        Alert.alert('Sign in failed', fallbackMessage);
+      } finally {
+        isProcessingEmailLinkRef.current = false;
+        setIsSubmitting(false);
+      }
+    },
+    [
+      clearEmailLoginVerificationState,
+      extractEmailLinkCandidates,
+      isEmailLoginVerificationPending,
+      pendingLoginEmail,
+      router,
+    ]
+  );
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      void tryCompleteEmailLoginFromUrl(url);
+    });
+
+    void Linking.getInitialURL().then((initialUrl) => {
+      void tryCompleteEmailLoginFromUrl(initialUrl);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [tryCompleteEmailLoginFromUrl]);
+
+  function getAuthErrorMessage(error: unknown): string {
+    const emailForMessage = pendingLoginEmail || loginEmail.trim();
+
     if (error instanceof Error && error.message === 'MISSING_EMAIL') {
       return 'Enter your email address first.';
     }
 
-    if (error instanceof Error && error.message === 'MISSING_OTP_CODE') {
-      return 'Enter the verification code sent to your email.';
+    if (error instanceof Error && error.message === 'MISSING_PASSWORD') {
+      return 'Enter your password first.';
     }
 
-    if (error instanceof Error && error.message === 'OTP_ENDPOINTS_NOT_CONFIGURED') {
-      return 'Email OTP is not configured yet. Set EXPO_PUBLIC_OTP_REQUEST_URL and EXPO_PUBLIC_OTP_VERIFY_URL in .env, then restart Expo (npx expo start -c).';
-    }
-
-    if (error instanceof Error && error.message === 'OTP_REQUEST_FAILED') {
-      return 'Unable to send verification code by email right now. Please try again.';
-    }
-
-    if (error instanceof Error && error.message === 'OTP_INVALID_OR_EXPIRED') {
-      return 'That verification code is invalid or expired. Request a new one and try again.';
+    if (error instanceof Error && error.message === 'INVALID_EMAIL_LOGIN_LINK') {
+      return 'That email sign-in link is invalid. Request a new one and try again.';
     }
 
     if (
       error instanceof Error &&
       (error.message === 'EMAIL_NOT_VERIFIED' || error.message === 'EMAIL_VERIFICATION_LINK_SENT')
     ) {
-      return `A verification link has been sent to ${loginEmail.trim()}. Please verify your email before signing in.`;
+      return `A verification link has been sent to ${emailForMessage}. Please verify your email before signing in.`;
     }
 
     if (!(error instanceof FirebaseError)) {
@@ -434,13 +496,29 @@ export default function AuthScreen() {
         return 'Network error. Check your connection and try again.';
       case 'auth/too-many-requests':
         return 'Too many attempts. Please wait a bit and try again.';
+      case 'auth/invalid-action-code':
+      case 'auth/expired-action-code':
+        return 'This email sign-in link is invalid or expired. Request a new one.';
+      case 'auth/invalid-continue-uri':
+      case 'auth/unauthorized-continue-uri':
+        return 'Email login link is not configured correctly in Firebase. Check EXPO_PUBLIC_EMAIL_LOGIN_CONTINUE_URL and authorized domains.';
+      case 'auth/operation-not-allowed':
+        return 'Email link sign-in is not enabled in Firebase Authentication settings.';
       default:
         return error.message || 'Authentication failed. Please try again.';
     }
-  };
+  }
 
   const onLogin = async () => {
-    if (isSubmitting || isTwoStepPending) {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (isEmailLoginVerificationPending) {
+      Alert.alert(
+        'Awaiting email approval',
+        `Open the sign-in verification email sent to ${pendingLoginEmail || loginEmail.trim()} and tap the link to finish signing in.`
+      );
       return;
     }
 
@@ -452,10 +530,16 @@ export default function AuthScreen() {
     setIsSubmitting(true);
 
     try {
-      await loginUser(loginEmail, loginPassword);
-      await logoutUser();
-      const otpChallenge = await requestEmailOtp(loginEmail);
-      beginTwoStepChallenge(otpChallenge.challengeId, otpChallenge.expiresAt);
+      await startEmailLoginVerification(loginEmail, loginPassword);
+      const normalizedEmail = loginEmail.trim();
+      setPendingLoginEmail(normalizedEmail);
+      setIsEmailLoginVerificationPending(true);
+      await AsyncStorage.setItem(PENDING_EMAIL_LOGIN_KEY, normalizedEmail);
+
+      Alert.alert(
+        'Check your email',
+        `For security, we sent a sign-in verification link to ${normalizedEmail}. Tap the link in your email to finish signing in.`
+      );
     } catch (error) {
       if (
         error instanceof Error &&
@@ -470,8 +554,33 @@ export default function AuthScreen() {
     }
   };
 
+  const onResendLoginVerification = async () => {
+    if (isSubmitting || !isEmailLoginVerificationPending) {
+      return;
+    }
+
+    if (!loginPassword) {
+      Alert.alert('Missing password', 'Enter your password to resend the verification link.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await startEmailLoginVerification(pendingLoginEmail || loginEmail, loginPassword);
+      Alert.alert(
+        'Verification link sent',
+        `A new sign-in verification link was sent to ${pendingLoginEmail || loginEmail.trim()}. Tap the link in your email to continue.`
+      );
+    } catch (error) {
+      Alert.alert('Unable to resend', getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const onResendVerification = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset || isTwoStepPending) {
+    if (isSubmitting || isResendingVerification || isSendingReset || isEmailLoginVerificationPending) {
       return;
     }
 
@@ -501,7 +610,7 @@ export default function AuthScreen() {
   };
 
   const onForgotPassword = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset || isTwoStepPending) {
+    if (isSubmitting || isResendingVerification || isSendingReset || isEmailLoginVerificationPending) {
       return;
     }
 
@@ -554,7 +663,7 @@ export default function AuthScreen() {
             onPress: () => {
               // Switch to login mode so they can attempt to login after verification
               setMode('login');
-              clearTwoStepState();
+              clearEmailLoginVerificationState();
               setSignupEmail('');
               setSignupPassword('');
               setConfirmPassword('');
@@ -587,9 +696,9 @@ export default function AuthScreen() {
   const onChangeMode = useCallback(
     (nextMode: 'login' | 'signup') => {
       setMode(nextMode);
-      clearTwoStepState();
+      clearEmailLoginVerificationState();
     },
-    [clearTwoStepState]
+    [clearEmailLoginVerificationState]
   );
 
   if (initializing) {
@@ -734,24 +843,24 @@ export default function AuthScreen() {
                   {...inputFieldResponsiveProps}
                 />
 
-                {isTwoStepPending ? (
+                {isEmailLoginVerificationPending ? (
                   <>
-                    <InputField
-                      icon="shield-checkmark-outline"
-                      placeholder="6-digit verification code"
-                      value={twoStepCodeInput}
-                      onChangeText={setTwoStepCodeInput}
-                      keyboardType="numeric"
-                      autoCapitalize="none"
-                      {...inputFieldResponsiveProps}
-                    />
-                    <Pressable style={styles.resendBtn} onPress={onResendTwoStepCode} disabled={isSubmitting}>
-                      <Text style={[styles.resendText, responsiveStyles.resendText]}>Resend code to email</Text>
+                    <Text style={[styles.resendText, responsiveStyles.resendText]}>
+                      Open your email and tap the sign-in verification link.
+                    </Text>
+                    <Pressable
+                      style={styles.resendBtn}
+                      onPress={onResendLoginVerification}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={[styles.resendText, responsiveStyles.resendText]}>
+                        Resend login verification email
+                      </Text>
                     </Pressable>
                   </>
                 ) : null}
 
-                {!isTwoStepPending ? (
+                {!isEmailLoginVerificationPending ? (
                   <>
                     <Pressable
                       style={styles.forgotBtn}
@@ -781,11 +890,17 @@ export default function AuthScreen() {
                     responsiveStyles.primaryButton,
                     isSubmitting && styles.primaryButtonDisabled,
                   ]}
-                  onPress={isTwoStepPending ? onVerifyTwoStepCode : onLogin}
+                  onPress={onLogin}
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
-                    {isSubmitting ? 'Signing In...' : isTwoStepPending ? 'Verify Email Code' : 'Sign In'}
+                    {isSubmitting
+                      ? isEmailLoginVerificationPending
+                        ? 'Verifying...'
+                        : 'Signing In...'
+                      : isEmailLoginVerificationPending
+                        ? 'Awaiting Email Verification'
+                        : 'Sign In'}
                   </Text>
                   {isSubmitting ? (
                     <ActivityIndicator size="small" color="#0B1220" />
