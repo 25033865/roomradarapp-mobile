@@ -397,7 +397,7 @@ export default function AuthScreen() {
     }
 
     if (error instanceof Error && error.message === 'OTP_ENDPOINTS_NOT_CONFIGURED') {
-      return 'Email OTP is not configured yet. Set EXPO_PUBLIC_OTP_REQUEST_URL and EXPO_PUBLIC_OTP_VERIFY_URL.';
+      return 'Email OTP is not configured yet. Set EXPO_PUBLIC_OTP_REQUEST_URL and EXPO_PUBLIC_OTP_VERIFY_URL in .env, then restart Expo (npx expo start -c).';
     }
 
     if (error instanceof Error && error.message === 'OTP_REQUEST_FAILED') {
