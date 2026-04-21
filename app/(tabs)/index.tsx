@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../authprovider';
-import { loginUser, registerUser, requestPasswordReset, resendVerificationForCredentials } from '../../authService';
+import { loginUser, logoutUser, registerUser, requestPasswordReset, resendVerificationForCredentials } from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -37,6 +37,10 @@ export default function AuthScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [isTwoStepPending, setIsTwoStepPending] = useState(false);
+  const [twoStepCode, setTwoStepCode] = useState('');
+  const [twoStepCodeInput, setTwoStepCodeInput] = useState('');
+  const [twoStepCodeExpiry, setTwoStepCodeExpiry] = useState<number | null>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -106,10 +110,10 @@ export default function AuthScreen() {
   }, [mode, switchAnim]);
 
   useEffect(() => {
-    if (!initializing && user && isEmailVerified) {
-      router.replace('/explore');
+    if (!initializing && user && isEmailVerified && !isTwoStepPending) {
+      router.replace('/homepage');
     }
-  }, [initializing, isEmailVerified, router, user]);
+  }, [initializing, isEmailVerified, isTwoStepPending, router, user]);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -301,6 +305,74 @@ export default function AuthScreen() {
     [responsiveStyles]
   );
 
+  const clearTwoStepState = useCallback(() => {
+    setIsTwoStepPending(false);
+    setTwoStepCode('');
+    setTwoStepCodeInput('');
+    setTwoStepCodeExpiry(null);
+  }, []);
+
+  const beginTwoStepChallenge = useCallback(() => {
+    const generatedCode = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+
+    setIsTwoStepPending(true);
+    setTwoStepCode(generatedCode);
+    setTwoStepCodeInput('');
+    setTwoStepCodeExpiry(expiresAt);
+
+    Alert.alert(
+      'Two-Step Verification',
+      `Enter this 6-digit code to finish signing in: ${generatedCode}`
+    );
+  }, []);
+
+  const onVerifyTwoStepCode = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!isTwoStepPending || !twoStepCode) {
+      return;
+    }
+
+    if (!twoStepCodeInput.trim()) {
+      Alert.alert('Missing code', 'Please enter the 6-digit verification code.');
+      return;
+    }
+
+    if (twoStepCodeExpiry && Date.now() > twoStepCodeExpiry) {
+      beginTwoStepChallenge();
+      Alert.alert('Code expired', 'We generated a new verification code.');
+      return;
+    }
+
+    if (twoStepCodeInput.trim() !== twoStepCode) {
+      Alert.alert('Invalid code', 'The verification code is incorrect. Please try again.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await loginUser(loginEmail, loginPassword);
+      clearTwoStepState();
+      router.replace('/homepage');
+    } catch (error) {
+      Alert.alert('Sign in failed', getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onResendTwoStepCode = () => {
+    if (isSubmitting || !isTwoStepPending) {
+      return;
+    }
+
+    beginTwoStepChallenge();
+  };
+
   const getAuthErrorMessage = (error: unknown): string => {
     if (error instanceof Error && error.message === 'MISSING_EMAIL') {
       return 'Enter your email address first.';
@@ -340,7 +412,7 @@ export default function AuthScreen() {
   };
 
   const onLogin = async () => {
-    if (isSubmitting) {
+    if (isSubmitting || isTwoStepPending) {
       return;
     }
 
@@ -353,7 +425,8 @@ export default function AuthScreen() {
 
     try {
       await loginUser(loginEmail, loginPassword);
-      router.replace('/explore');
+      await logoutUser();
+      beginTwoStepChallenge();
     } catch (error) {
       if (
         error instanceof Error &&
@@ -369,7 +442,7 @@ export default function AuthScreen() {
   };
 
   const onResendVerification = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset) {
+    if (isSubmitting || isResendingVerification || isSendingReset || isTwoStepPending) {
       return;
     }
 
@@ -399,7 +472,7 @@ export default function AuthScreen() {
   };
 
   const onForgotPassword = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset) {
+    if (isSubmitting || isResendingVerification || isSendingReset || isTwoStepPending) {
       return;
     }
 
@@ -452,6 +525,7 @@ export default function AuthScreen() {
             onPress: () => {
               // Switch to login mode so they can attempt to login after verification
               setMode('login');
+              clearTwoStepState();
               setSignupEmail('');
               setSignupPassword('');
               setConfirmPassword('');
@@ -480,6 +554,14 @@ export default function AuthScreen() {
       return measuredWidth;
     });
   }, []);
+
+  const onChangeMode = useCallback(
+    (nextMode: 'login' | 'signup') => {
+      setMode(nextMode);
+      clearTwoStepState();
+    },
+    [clearTwoStepState]
+  );
 
   if (initializing) {
     return (
@@ -574,7 +656,7 @@ export default function AuthScreen() {
                 ]}
               />
 
-              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => setMode('login')}>
+              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => onChangeMode('login')}>
                 <Animated.Text
                   style={[
                     styles.switchText,
@@ -586,7 +668,7 @@ export default function AuthScreen() {
                 </Animated.Text>
               </Pressable>
 
-              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => setMode('signup')}>
+              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => onChangeMode('signup')}>
                 <Animated.Text
                   style={[
                     styles.switchText,
@@ -623,25 +705,46 @@ export default function AuthScreen() {
                   {...inputFieldResponsiveProps}
                 />
 
-                <Pressable
-                  style={styles.forgotBtn}
-                  onPress={onForgotPassword}
-                  disabled={isSubmitting || isResendingVerification || isSendingReset}
-                >
-                  <Text style={[styles.forgotText, responsiveStyles.forgotText]}>
-                    {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
-                  </Text>
-                </Pressable>
+                {isTwoStepPending ? (
+                  <>
+                    <InputField
+                      icon="shield-checkmark-outline"
+                      placeholder="6-digit verification code"
+                      value={twoStepCodeInput}
+                      onChangeText={setTwoStepCodeInput}
+                      keyboardType="numeric"
+                      autoCapitalize="none"
+                      {...inputFieldResponsiveProps}
+                    />
+                    <Pressable style={styles.resendBtn} onPress={onResendTwoStepCode} disabled={isSubmitting}>
+                      <Text style={[styles.resendText, responsiveStyles.resendText]}>Resend verification code</Text>
+                    </Pressable>
+                  </>
+                ) : null}
 
-                <Pressable
-                  style={styles.resendBtn}
-                  onPress={onResendVerification}
-                  disabled={isSubmitting || isResendingVerification}
-                >
-                  <Text style={[styles.resendText, responsiveStyles.resendText]}>
-                    {isResendingVerification ? 'Sending verification link...' : 'Resend verification email'}
-                  </Text>
-                </Pressable>
+                {!isTwoStepPending ? (
+                  <>
+                    <Pressable
+                      style={styles.forgotBtn}
+                      onPress={onForgotPassword}
+                      disabled={isSubmitting || isResendingVerification || isSendingReset}
+                    >
+                      <Text style={[styles.forgotText, responsiveStyles.forgotText]}>
+                        {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.resendBtn}
+                      onPress={onResendVerification}
+                      disabled={isSubmitting || isResendingVerification}
+                    >
+                      <Text style={[styles.resendText, responsiveStyles.resendText]}>
+                        {isResendingVerification ? 'Sending verification link...' : 'Resend verification email'}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
 
                 <Pressable
                   style={[
@@ -649,11 +752,11 @@ export default function AuthScreen() {
                     responsiveStyles.primaryButton,
                     isSubmitting && styles.primaryButtonDisabled,
                   ]}
-                  onPress={onLogin}
+                  onPress={isTwoStepPending ? onVerifyTwoStepCode : onLogin}
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
-                    {isSubmitting ? 'Signing In...' : 'Sign In'}
+                    {isSubmitting ? 'Signing In...' : isTwoStepPending ? 'Verify Code' : 'Sign In'}
                   </Text>
                   {isSubmitting ? (
                     <ActivityIndicator size="small" color="#0B1220" />
@@ -754,7 +857,7 @@ export default function AuthScreen() {
                   ? "Don't have an account?"
                   : 'Already have an account?'}
               </Text>
-              <Pressable onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}>
+              <Pressable onPress={() => onChangeMode(mode === 'login' ? 'signup' : 'login')}>
                 <Text style={[styles.bottomLink, responsiveStyles.bottomLink]}>
                   {mode === 'login' ? ' Sign Up' : ' Sign In'}
                 </Text>
@@ -773,7 +876,7 @@ type InputFieldProps = {
   value: string;
   onChangeText: (text: string) => void;
   secureTextEntry?: boolean;
-  keyboardType?: 'default' | 'email-address';
+  keyboardType?: 'default' | 'email-address' | 'numeric';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightPress?: () => void;
