@@ -23,7 +23,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "enablePreferredFrameRate": true
+      "enablePreferredFrameRate": true,
+      "package": "com.anonymous.roomradarappmobile"
     },
     "web": {
       "output": "static",
