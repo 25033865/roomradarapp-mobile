@@ -1,7 +1,5 @@
 import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,27 +27,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../authprovider';
 import {
-  completeEmailLoginVerification,
+  loginUser,
   registerUser,
   requestPasswordReset,
   resendVerificationForCredentials,
-  startEmailLoginVerification,
 } from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { user, initializing, isEmailVerified } = useAuth();
+  const { user, initializing } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
-  const [isEmailLoginVerificationPending, setIsEmailLoginVerificationPending] = useState(false);
-  const [pendingLoginEmail, setPendingLoginEmail] = useState('');
-
-  const isProcessingEmailLinkRef = useRef(false);
-  const lastHandledEmailLinkRef = useRef<string | null>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -68,8 +60,6 @@ export default function AuthScreen() {
   const scaleAnim = useRef(new Animated.Value(0.96)).current;
   const floatingAnim = useRef(new Animated.Value(0)).current;
   const switchAnim = useRef(new Animated.Value(0)).current;
-
-  const PENDING_EMAIL_LOGIN_KEY = 'pending-email-login-email';
 
   useEffect(() => {
     Animated.parallel([
@@ -121,10 +111,10 @@ export default function AuthScreen() {
   }, [mode, switchAnim]);
 
   useEffect(() => {
-    if (!initializing && user && isEmailVerified) {
+    if (!initializing && user) {
       router.replace('/homepage');
     }
-  }, [initializing, isEmailVerified, router, user]);
+  }, [initializing, router, user]);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -316,163 +306,13 @@ export default function AuthScreen() {
     [responsiveStyles]
   );
 
-  const clearEmailLoginVerificationState = useCallback(() => {
-    setIsEmailLoginVerificationPending(false);
-    setPendingLoginEmail('');
-    void AsyncStorage.removeItem(PENDING_EMAIL_LOGIN_KEY);
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const hydratePendingEmailLogin = async () => {
-      const savedPendingEmail = await AsyncStorage.getItem(PENDING_EMAIL_LOGIN_KEY);
-
-      if (!isMounted || !savedPendingEmail) {
-        return;
-      }
-
-      setPendingLoginEmail(savedPendingEmail);
-      setIsEmailLoginVerificationPending(true);
-      setLoginEmail((currentEmail) => (currentEmail.trim() ? currentEmail : savedPendingEmail));
-    };
-
-    void hydratePendingEmailLogin();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const extractEmailLinkCandidates = useCallback((incomingUrl: string): string[] => {
-    const candidates = new Set<string>();
-
-    if (!incomingUrl) {
-      return [];
-    }
-
-    const addCandidate = (value: string | null | undefined) => {
-      if (!value) {
-        return;
-      }
-
-      candidates.add(value);
-
-      try {
-        const decoded = decodeURIComponent(value);
-        candidates.add(decoded);
-      } catch {
-        // Ignore invalid URI component decoding.
-      }
-    };
-
-    addCandidate(incomingUrl);
-
-    const parsed = Linking.parse(incomingUrl);
-    const queryParams = parsed.queryParams ?? {};
-
-    const nestedLink = queryParams.link;
-    const deepLinkId = queryParams.deep_link_id;
-
-    if (typeof nestedLink === 'string') {
-      addCandidate(nestedLink);
-    }
-
-    if (typeof deepLinkId === 'string') {
-      addCandidate(deepLinkId);
-    }
-
-    return Array.from(candidates);
-  }, []);
-
-  const tryCompleteEmailLoginFromUrl = useCallback(
-    async (incomingUrl: string | null | undefined) => {
-      if (!incomingUrl || !isEmailLoginVerificationPending || !pendingLoginEmail.trim()) {
-        return;
-      }
-
-      if (isProcessingEmailLinkRef.current || lastHandledEmailLinkRef.current === incomingUrl) {
-        return;
-      }
-
-      const candidates = extractEmailLinkCandidates(incomingUrl);
-
-      if (candidates.length === 0) {
-        return;
-      }
-
-      isProcessingEmailLinkRef.current = true;
-      setIsSubmitting(true);
-
-      let completionError: unknown = null;
-
-      try {
-        for (const candidate of candidates) {
-          try {
-            await completeEmailLoginVerification(pendingLoginEmail, candidate);
-            lastHandledEmailLinkRef.current = incomingUrl;
-            clearEmailLoginVerificationState();
-            router.replace('/homepage');
-            return;
-          } catch (error) {
-            completionError = error;
-          }
-        }
-
-        const fallbackMessage =
-          completionError instanceof Error && completionError.message === 'INVALID_EMAIL_LOGIN_LINK'
-            ? 'That email sign-in link is invalid. Request a new one and try again.'
-            : 'Could not verify the email sign-in link. Request a new verification email and try again.';
-
-        Alert.alert('Sign in failed', fallbackMessage);
-      } finally {
-        isProcessingEmailLinkRef.current = false;
-        setIsSubmitting(false);
-      }
-    },
-    [
-      clearEmailLoginVerificationState,
-      extractEmailLinkCandidates,
-      isEmailLoginVerificationPending,
-      pendingLoginEmail,
-      router,
-    ]
-  );
-
-  useEffect(() => {
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      void tryCompleteEmailLoginFromUrl(url);
-    });
-
-    void Linking.getInitialURL().then((initialUrl) => {
-      void tryCompleteEmailLoginFromUrl(initialUrl);
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [tryCompleteEmailLoginFromUrl]);
-
   function getAuthErrorMessage(error: unknown): string {
-    const emailForMessage = pendingLoginEmail || loginEmail.trim();
-
     if (error instanceof Error && error.message === 'MISSING_EMAIL') {
       return 'Enter your email address first.';
     }
 
     if (error instanceof Error && error.message === 'MISSING_PASSWORD') {
       return 'Enter your password first.';
-    }
-
-    if (error instanceof Error && error.message === 'INVALID_EMAIL_LOGIN_LINK') {
-      return 'That email sign-in link is invalid. Request a new one and try again.';
-    }
-
-    if (
-      error instanceof Error &&
-      (error.message === 'EMAIL_NOT_VERIFIED' || error.message === 'EMAIL_VERIFICATION_LINK_SENT')
-    ) {
-      return `A verification link has been sent to ${emailForMessage}. Please verify your email before signing in.`;
     }
 
     if (!(error instanceof FirebaseError)) {
@@ -496,14 +336,6 @@ export default function AuthScreen() {
         return 'Network error. Check your connection and try again.';
       case 'auth/too-many-requests':
         return 'Too many attempts. Please wait a bit and try again.';
-      case 'auth/invalid-action-code':
-      case 'auth/expired-action-code':
-        return 'This email sign-in link is invalid or expired. Request a new one.';
-      case 'auth/invalid-continue-uri':
-      case 'auth/unauthorized-continue-uri':
-        return 'Email login link is not configured correctly in Firebase. Check EXPO_PUBLIC_EMAIL_LOGIN_CONTINUE_URL and authorized domains.';
-      case 'auth/operation-not-allowed':
-        return 'Email link sign-in is not enabled in Firebase Authentication settings.';
       default:
         return error.message || 'Authentication failed. Please try again.';
     }
@@ -511,14 +343,6 @@ export default function AuthScreen() {
 
   const onLogin = async () => {
     if (isSubmitting) {
-      return;
-    }
-
-    if (isEmailLoginVerificationPending) {
-      Alert.alert(
-        'Awaiting email approval',
-        `Open the sign-in verification email sent to ${pendingLoginEmail || loginEmail.trim()} and tap the link to finish signing in.`
-      );
       return;
     }
 
@@ -530,57 +354,17 @@ export default function AuthScreen() {
     setIsSubmitting(true);
 
     try {
-      await startEmailLoginVerification(loginEmail, loginPassword);
-      const normalizedEmail = loginEmail.trim();
-      setPendingLoginEmail(normalizedEmail);
-      setIsEmailLoginVerificationPending(true);
-      await AsyncStorage.setItem(PENDING_EMAIL_LOGIN_KEY, normalizedEmail);
-
-      Alert.alert(
-        'Check your email',
-        `For security, we sent a sign-in verification link to ${normalizedEmail}. Tap the link in your email to finish signing in.`
-      );
+      await loginUser(loginEmail, loginPassword);
+      router.replace('/homepage');
     } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message === 'EMAIL_NOT_VERIFIED' || error.message === 'EMAIL_VERIFICATION_LINK_SENT')
-      ) {
-        Alert.alert('Verification Required', getAuthErrorMessage(error));
-      } else {
-        Alert.alert('Sign in failed', getAuthErrorMessage(error));
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const onResendLoginVerification = async () => {
-    if (isSubmitting || !isEmailLoginVerificationPending) {
-      return;
-    }
-
-    if (!loginPassword) {
-      Alert.alert('Missing password', 'Enter your password to resend the verification link.');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      await startEmailLoginVerification(pendingLoginEmail || loginEmail, loginPassword);
-      Alert.alert(
-        'Verification link sent',
-        `A new sign-in verification link was sent to ${pendingLoginEmail || loginEmail.trim()}. Tap the link in your email to continue.`
-      );
-    } catch (error) {
-      Alert.alert('Unable to resend', getAuthErrorMessage(error));
+      Alert.alert('Sign in failed', getAuthErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const onResendVerification = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset || isEmailLoginVerificationPending) {
+    if (isSubmitting || isResendingVerification || isSendingReset) {
       return;
     }
 
@@ -610,7 +394,7 @@ export default function AuthScreen() {
   };
 
   const onForgotPassword = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset || isEmailLoginVerificationPending) {
+    if (isSubmitting || isResendingVerification || isSendingReset) {
       return;
     }
 
@@ -663,7 +447,6 @@ export default function AuthScreen() {
             onPress: () => {
               // Switch to login mode so they can attempt to login after verification
               setMode('login');
-              clearEmailLoginVerificationState();
               setSignupEmail('');
               setSignupPassword('');
               setConfirmPassword('');
@@ -696,9 +479,8 @@ export default function AuthScreen() {
   const onChangeMode = useCallback(
     (nextMode: 'login' | 'signup') => {
       setMode(nextMode);
-      clearEmailLoginVerificationState();
     },
-    [clearEmailLoginVerificationState]
+    []
   );
 
   if (initializing) {
@@ -843,46 +625,25 @@ export default function AuthScreen() {
                   {...inputFieldResponsiveProps}
                 />
 
-                {isEmailLoginVerificationPending ? (
-                  <>
-                    <Text style={[styles.resendText, responsiveStyles.resendText]}>
-                      Open your email and tap the sign-in verification link.
-                    </Text>
-                    <Pressable
-                      style={styles.resendBtn}
-                      onPress={onResendLoginVerification}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={[styles.resendText, responsiveStyles.resendText]}>
-                        Resend login verification email
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
+                <Pressable
+                  style={styles.forgotBtn}
+                  onPress={onForgotPassword}
+                  disabled={isSubmitting || isResendingVerification || isSendingReset}
+                >
+                  <Text style={[styles.forgotText, responsiveStyles.forgotText]}>
+                    {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
+                  </Text>
+                </Pressable>
 
-                {!isEmailLoginVerificationPending ? (
-                  <>
-                    <Pressable
-                      style={styles.forgotBtn}
-                      onPress={onForgotPassword}
-                      disabled={isSubmitting || isResendingVerification || isSendingReset}
-                    >
-                      <Text style={[styles.forgotText, responsiveStyles.forgotText]}>
-                        {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.resendBtn}
-                      onPress={onResendVerification}
-                      disabled={isSubmitting || isResendingVerification}
-                    >
-                      <Text style={[styles.resendText, responsiveStyles.resendText]}>
-                        {isResendingVerification ? 'Sending verification link...' : 'Resend verification email'}
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
+                <Pressable
+                  style={styles.resendBtn}
+                  onPress={onResendVerification}
+                  disabled={isSubmitting || isResendingVerification}
+                >
+                  <Text style={[styles.resendText, responsiveStyles.resendText]}>
+                    {isResendingVerification ? 'Sending verification link...' : 'Resend verification email'}
+                  </Text>
+                </Pressable>
 
                 <Pressable
                   style={[
@@ -894,13 +655,7 @@ export default function AuthScreen() {
                   disabled={isSubmitting}
                 >
                   <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
-                    {isSubmitting
-                      ? isEmailLoginVerificationPending
-                        ? 'Verifying...'
-                        : 'Signing In...'
-                      : isEmailLoginVerificationPending
-                        ? 'Awaiting Email Verification'
-                        : 'Sign In'}
+                    {isSubmitting ? 'Signing In...' : 'Sign In'}
                   </Text>
                   {isSubmitting ? (
                     <ActivityIndicator size="small" color="#0B1220" />

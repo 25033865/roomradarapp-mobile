@@ -1,4 +1,5 @@
 import {
+    ActionCodeSettings,
     createUserWithEmailAndPassword,
     isSignInWithEmailLink,
     reload,
@@ -16,6 +17,128 @@ import { auth } from './firebaseConfig';
 const emailLoginContinueUrl =
     process.env.EXPO_PUBLIC_EMAIL_LOGIN_CONTINUE_URL ||
     'https://roomradarapp-50fb1.firebaseapp.com/login-approval';
+
+const emailLoginAndroidPackageName =
+    process.env.EXPO_PUBLIC_EMAIL_LOGIN_ANDROID_PACKAGE_NAME ||
+    process.env.EXPO_PUBLIC_ANDROID_PACKAGE_NAME ||
+    'com.anonymous.roomradarappmobile';
+
+const emailLoginIosBundleId =
+    process.env.EXPO_PUBLIC_EMAIL_LOGIN_IOS_BUNDLE_ID ||
+    process.env.EXPO_PUBLIC_IOS_BUNDLE_ID;
+
+const emailLinkParamKeys = [
+    'link',
+    'deep_link_id',
+    'url',
+    'continueUrl',
+    'continue_url',
+    'redirectUrl',
+    'redirect_url',
+] as const;
+
+const extractEmailLinkCandidates = (incomingLink: string): string[] => {
+    const queue: string[] = [];
+    const seen = new Set<string>();
+
+    const enqueue = (value: string | null | undefined) => {
+        if (!value) {
+            return;
+        }
+
+        const normalized = value
+            .trim()
+            .replace(/&amp;/gi, '&')
+            .replace(/^['"]|['"]$/g, '');
+
+        if (!normalized) {
+            return;
+        }
+
+        const variants = new Set<string>([normalized]);
+        let decoded = normalized;
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+                const nextDecoded = decodeURIComponent(decoded);
+
+                if (!nextDecoded || nextDecoded === decoded) {
+                    break;
+                }
+
+                variants.add(nextDecoded);
+                decoded = nextDecoded;
+            } catch {
+                break;
+            }
+        }
+
+        for (const variant of variants) {
+            if (seen.has(variant)) {
+                continue;
+            }
+
+            seen.add(variant);
+            queue.push(variant);
+        }
+    };
+
+    enqueue(incomingLink);
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+
+        if (!current) {
+            continue;
+        }
+
+        let parsed: URL;
+
+        try {
+            parsed = new URL(current, emailLoginContinueUrl);
+        } catch {
+            continue;
+        }
+
+        for (const paramKey of emailLinkParamKeys) {
+            enqueue(parsed.searchParams.get(paramKey));
+        }
+
+        const mode = parsed.searchParams.get('mode');
+        const oobCode = parsed.searchParams.get('oobCode');
+        const apiKey = parsed.searchParams.get('apiKey');
+
+        if (mode === 'signIn' && oobCode && apiKey) {
+            const canonicalLink = `${parsed.origin}${parsed.pathname}?mode=${encodeURIComponent(
+                mode
+            )}&oobCode=${encodeURIComponent(oobCode)}&apiKey=${encodeURIComponent(
+                apiKey
+            )}`;
+
+            enqueue(canonicalLink);
+        }
+    }
+
+    const rankCandidate = (candidate: string): number => {
+        let score = 0;
+
+        if (candidate.includes('mode=signIn')) {
+            score += 2;
+        }
+
+        if (candidate.includes('oobCode=')) {
+            score += 2;
+        }
+
+        if (candidate.includes('apiKey=')) {
+            score += 1;
+        }
+
+        return score;
+    };
+
+    return Array.from(seen).sort((left, right) => rankCandidate(right) - rankCandidate(left));
+};
 
 export const registerUser = async (
     username: string,
@@ -49,19 +172,6 @@ export const loginUser = async (
         email.trim(),
         password
     );
-
-    // Reload user to get latest email verification status
-    await reload(userCredential.user);
-
-    // Check if email is verified
-    if (!userCredential.user.emailVerified) {
-        // Re-send verification link when unverified user attempts login
-        await sendEmailVerification(userCredential.user);
-
-        // Sign out unverified user
-        await signOut(auth);
-        throw new Error('EMAIL_VERIFICATION_LINK_SENT');
-    }
 
     return userCredential.user;
 };
@@ -143,10 +253,22 @@ export const startEmailLoginVerification = async (
             throw new Error('EMAIL_VERIFICATION_LINK_SENT');
         }
 
-        await sendSignInLinkToEmail(auth, normalizedEmail, {
+        const actionCodeSettings: ActionCodeSettings = {
             url: emailLoginContinueUrl,
             handleCodeInApp: true,
-        });
+            android: {
+                packageName: emailLoginAndroidPackageName,
+                installApp: true,
+            },
+        };
+
+        if (emailLoginIosBundleId) {
+            actionCodeSettings.iOS = {
+                bundleId: emailLoginIosBundleId,
+            };
+        }
+
+        await sendSignInLinkToEmail(auth, normalizedEmail, actionCodeSettings);
     } finally {
         await signOut(auth);
     }
@@ -167,23 +289,38 @@ export const completeEmailLoginVerification = async (
         throw new Error('MISSING_EMAIL_LOGIN_LINK');
     }
 
-    if (!isSignInWithEmailLink(auth, normalizedEmailLink)) {
-        throw new Error('INVALID_EMAIL_LOGIN_LINK');
+    const emailLinkCandidates = extractEmailLinkCandidates(normalizedEmailLink);
+    let lastCompletionError: unknown = null;
+
+    for (const candidateLink of emailLinkCandidates) {
+        if (!isSignInWithEmailLink(auth, candidateLink)) {
+            continue;
+        }
+
+        try {
+            const userCredential = await signInWithEmailLink(
+                auth,
+                normalizedEmail,
+                candidateLink
+            );
+
+            await reload(userCredential.user);
+
+            if (!userCredential.user.emailVerified) {
+                await sendEmailVerification(userCredential.user);
+                await signOut(auth);
+                throw new Error('EMAIL_VERIFICATION_LINK_SENT');
+            }
+
+            return userCredential.user;
+        } catch (error) {
+            lastCompletionError = error;
+        }
     }
 
-    const userCredential = await signInWithEmailLink(
-        auth,
-        normalizedEmail,
-        normalizedEmailLink
-    );
-
-    await reload(userCredential.user);
-
-    if (!userCredential.user.emailVerified) {
-        await sendEmailVerification(userCredential.user);
-        await signOut(auth);
-        throw new Error('EMAIL_VERIFICATION_LINK_SENT');
+    if (lastCompletionError) {
+        throw lastCompletionError;
     }
 
-    return userCredential.user;
+    throw new Error('INVALID_EMAIL_LOGIN_LINK');
 };
