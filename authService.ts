@@ -157,8 +157,8 @@ export const registerUser = async (
         });
     }
 
-    // Send verification email after signup
     await sendEmailVerification(userCredential.user);
+    await signOut(auth);
 
     return userCredential.user;
 };
@@ -172,6 +172,14 @@ export const loginUser = async (
         email.trim(),
         password
     );
+
+    await reload(userCredential.user);
+
+    if (!userCredential.user.emailVerified) {
+        await sendEmailVerification(userCredential.user);
+        await signOut(auth);
+        throw new Error('EMAIL_VERIFICATION_LINK_SENT');
+    }
 
     return userCredential.user;
 };
@@ -303,14 +311,6 @@ export const completeEmailLoginVerification = async (
                 normalizedEmail,
                 candidateLink
             );
-
-            await reload(userCredential.user);
-
-            if (!userCredential.user.emailVerified) {
-                await sendEmailVerification(userCredential.user);
-                await signOut(auth);
-                throw new Error('EMAIL_VERIFICATION_LINK_SENT');
-            }
 
             return userCredential.user;
         } catch (error) {

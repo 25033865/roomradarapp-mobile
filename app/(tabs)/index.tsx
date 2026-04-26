@@ -35,7 +35,7 @@ import {
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { user, initializing } = useAuth();
+  const { user, initializing, isEmailVerified } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -111,10 +111,10 @@ export default function AuthScreen() {
   }, [mode, switchAnim]);
 
   useEffect(() => {
-    if (!initializing && user) {
+    if (!initializing && user && isEmailVerified) {
       router.replace('/homepage');
     }
-  }, [initializing, router, user]);
+  }, [initializing, isEmailVerified, router, user]);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -313,6 +313,10 @@ export default function AuthScreen() {
 
     if (error instanceof Error && error.message === 'MISSING_PASSWORD') {
       return 'Enter your password first.';
+    }
+
+    if (error instanceof Error && error.message === 'EMAIL_VERIFICATION_LINK_SENT') {
+      return 'Your email is not verified yet. We sent a new verification link. Please verify it, then sign in again.';
     }
 
     if (!(error instanceof FirebaseError)) {
