@@ -1,146 +1,476 @@
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { Platform, StyleSheet, useWindowDimensions } from 'react-native';
+import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import React, { useState } from "react";
+import {
+	Dimensions,
+	FlatList,
+	Image,
+	SafeAreaView,
+	ScrollView,
+	StatusBar,
+	StyleSheet,
+	Text,
+	TextInput,
+	TouchableOpacity,
+	View,
+} from "react-native";
 
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { clamp, getDeviceFlags } from '@/constants/responsive';
-import { Fonts } from '@/constants/theme';
-import { useAuth } from '../../authprovider';
+const { width } = Dimensions.get("window");
 
-export default function TabTwoScreen() {
-	const router = useRouter();
-	const { user, initializing, isEmailVerified } = useAuth();
-	const { width } = useWindowDimensions();
-	const { isTablet } = getDeviceFlags(width);
-	const headerIconSize = clamp(width * 0.66, 220, isTablet ? 420 : 340);
-	const headerImageStyle = {
-		...styles.headerImage,
-		bottom: -Math.round(headerIconSize * 0.3),
-		left: -Math.round(headerIconSize * 0.11),
-	};
-	const logoSize = clamp(width * 0.24, 88, 150);
+const DISPLAY_NAME = "Mudau";
 
-	useEffect(() => {
-		if (!initializing && (!user || !isEmailVerified)) {
-			router.replace('/');
-		}
-	}, [initializing, isEmailVerified, router, user]);
+const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 
-	if (initializing || !user || !isEmailVerified) {
-		return (
-			<ThemedView style={styles.loadingContainer}>
-				<ThemedText>Checking your session...</ThemedText>
-			</ThemedView>
+const PLACES = [
+	{
+		id: "1",
+		name: "Mount Fuji",
+		location: "Tokyo, Japan",
+		rating: "4.8",
+		image:
+			"https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=600&q=80",
+	},
+	{
+		id: "2",
+		name: "Santorini",
+		location: "Greece",
+		rating: "4.9",
+		image:
+			"https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600&q=80",
+	},
+	{
+		id: "3",
+		name: "Amalfi Coast",
+		location: "Italy",
+		rating: "4.7",
+		image:
+			"https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?w=600&q=80",
+	},
+	{
+		id: "4",
+		name: "Bali Temples",
+		location: "Bali, Indonesia",
+		rating: "4.6",
+		image:
+			"https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&q=80",
+	},
+];
+
+const AVATAR_URL =
+	"https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&q=80";
+
+type Place = {
+	id: string;
+	name: string;
+	location: string;
+	rating: string;
+	image: string;
+};
+
+export default function HomeScreen() {
+	const [activeCategory, setActiveCategory] = useState("Most Viewed");
+	const [favorites, setFavorites] = useState<string[]>([]);
+	const [activeNav, setActiveNav] = useState("home");
+
+	const toggleFavorite = (id: string) => {
+		setFavorites((prev) =>
+			prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
 		);
-	}
+	};
+
+	const renderPlaceCard = ({ item }: { item: Place }) => {
+		const isFav = favorites.includes(item.id);
+		return (
+			<TouchableOpacity style={styles.card} activeOpacity={0.92}>
+				<Image source={{ uri: item.image }} style={styles.cardImage} />
+
+				{/* Favorite Button */}
+				<TouchableOpacity
+					style={styles.favoriteBtn}
+					onPress={() => toggleFavorite(item.id)}
+					activeOpacity={0.8}
+				>
+					<Ionicons
+						name={isFav ? "heart" : "heart-outline"}
+						size={18}
+						color={isFav ? "#FF4E6A" : "#fff"}
+					/>
+				</TouchableOpacity>
+
+				{/* Overlay Info */}
+				<View style={styles.cardOverlay}>
+					<Text style={styles.cardName}>{item.name}</Text>
+					<View style={styles.cardMeta}>
+						<View style={styles.cardLocationRow}>
+							<Ionicons name="location-sharp" size={12} color="#e0e0e0" />
+							<Text style={styles.cardLocation}>{item.location}</Text>
+						</View>
+						<View style={styles.ratingRow}>
+							<Ionicons name="star" size={12} color="#FFD700" />
+							<Text style={styles.ratingText}>{item.rating}</Text>
+						</View>
+					</View>
+				</View>
+			</TouchableOpacity>
+		);
+	};
 
 	return (
-		<ParallaxScrollView
-			headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-			headerImage={
-				<IconSymbol
-					size={headerIconSize}
-					color="#808080"
-					name="chevron.left.forwardslash.chevron.right"
-					style={headerImageStyle}
+		<SafeAreaView style={styles.safeArea}>
+			<StatusBar barStyle="dark-content" backgroundColor="#05071A" />
+
+			<ScrollView
+				style={styles.scrollView}
+				showsVerticalScrollIndicator={false}
+				contentContainerStyle={styles.scrollContent}
+			>
+				{/* ── Top Greeting ── */}
+				<View style={styles.header}>
+					<View>
+						<Text style={styles.greeting}>Hi, {DISPLAY_NAME} 👋</Text>
+						<Text style={styles.subtitle}>Find a Stay, fast!</Text>
+					</View>
+					<TouchableOpacity activeOpacity={0.85}>
+						<Image source={{ uri: AVATAR_URL }} style={styles.avatar} />
+						<View style={styles.avatarBadge} />
+					</TouchableOpacity>
+				</View>
+
+				{/* ── Search Bar ── */}
+				<View style={styles.searchContainer}>
+					<Feather
+						name="search"
+						size={18}
+						color="#aaa"
+						style={styles.searchIcon}
+					/>
+					<TextInput
+						style={styles.searchInput}
+						placeholder="Search places"
+						placeholderTextColor="#bbb"
+					/>
+					<TouchableOpacity style={styles.filterBtn} activeOpacity={0.8}>
+						<MaterialIcons name="tune" size={20} color="#fff" />
+					</TouchableOpacity>
+				</View>
+
+				{/* ── Popular Places Header ── */}
+				<View style={styles.sectionHeader}>
+					<Text style={styles.sectionTitle}>Popular places</Text>
+					<TouchableOpacity activeOpacity={0.7}>
+						<Text style={styles.viewAll}>View all</Text>
+					</TouchableOpacity>
+				</View>
+
+				{/* ── Category Tabs ── */}
+				<View style={styles.tabsRow}>
+					{CATEGORIES.map((cat) => {
+						const isActive = activeCategory === cat;
+						return (
+							<TouchableOpacity
+								key={cat}
+								style={[styles.tab, isActive && styles.tabActive]}
+								onPress={() => setActiveCategory(cat)}
+								activeOpacity={0.8}
+							>
+								<Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+									{cat}
+								</Text>
+							</TouchableOpacity>
+						);
+					})}
+				</View>
+
+				{/* ── Vertical Place Cards ── */}
+				<FlatList
+					data={PLACES}
+					renderItem={renderPlaceCard}
+					keyExtractor={(item) => item.id}
+					
+					showsVerticalScrollIndicator={false}
+					contentContainerStyle={styles.cardsList}
+					snapToInterval={CARD_WIDTH + 16}
+					decelerationRate="fast"
 				/>
-			}>
-			<ThemedView style={styles.titleContainer}>
-				<ThemedText
-					type="title"
-					style={{
-						fontFamily: Fonts.rounded,
-					}}>
-					Find a stay fast!
-				</ThemedText>
-			</ThemedView>
-			<ThemedText>This app includes example code to help you get started.</ThemedText>
-			<Collapsible title="File-based routing">
-				<ThemedText>
-					This app has two screens:{' '}
-					<ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-					<ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-				</ThemedText>
-				<ThemedText>
-					The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-					sets up the tab navigator.
-				</ThemedText>
-				<ExternalLink href="https://docs.expo.dev/router/introduction">
-					<ThemedText type="link">Learn more</ThemedText>
-				</ExternalLink>
-			</Collapsible>
-			<Collapsible title="Android, iOS, and web support">
-				<ThemedText>
-					You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-					<ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-				</ThemedText>
-			</Collapsible>
-			<Collapsible title="Images">
-				<ThemedText>
-					For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-					<ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-					different screen densities
-				</ThemedText>
-				<Image
-					source={require('@/assets/images/react-logo.png')}
-					style={{ width: logoSize, height: logoSize, alignSelf: 'center' }}
-				/>
-				<ExternalLink href="https://reactnative.dev/docs/images">
-					<ThemedText type="link">Learn more</ThemedText>
-				</ExternalLink>
-			</Collapsible>
-			<Collapsible title="Light and dark mode components">
-				<ThemedText>
-					This template has light and dark mode support. The{' '}
-					<ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-					what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-				</ThemedText>
-				<ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-					<ThemedText type="link">Learn more</ThemedText>
-				</ExternalLink>
-			</Collapsible>
-			<Collapsible title="Animations">
-				<ThemedText>
-					This template includes an example of an animated component. The{' '}
-					<ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-					the powerful{' '}
-					<ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-						react-native-reanimated
-					</ThemedText>{' '}
-					library to create a waving hand animation.
-				</ThemedText>
-				{Platform.select({
-					ios: (
-						<ThemedText>
-							The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-							component provides a parallax effect for the header image.
-						</ThemedText>
-					),
+			</ScrollView>
+
+			{/* ── Bottom Navigation Bar ── */}
+			<View style={styles.bottomNav}>
+				{[
+					{ key: "home", icon: "home" as const, label: "Home" },
+					{ key: "history", icon: "time-outline" as const, label: "History" },
+					{ key: "favorites", icon: "heart-outline" as const, label: "Saved" },
+					{ key: "profile", icon: "person-outline" as const, label: "Profile" },
+				].map((item) => {
+					const isActive = activeNav === item.key;
+					return (
+						<TouchableOpacity
+							key={item.key}
+							style={styles.navItem}
+							onPress={() => setActiveNav(item.key)}
+							activeOpacity={0.7}
+						>
+							<Ionicons
+								name={isActive && item.key === "home" ? "home" : item.icon}
+								size={24}
+								color={isActive ? "#1a1a2e" : "#c0c0c0"}
+							/>
+							{isActive && <View style={styles.navDot} />}
+						</TouchableOpacity>
+					);
 				})}
-			</Collapsible>
-		</ParallaxScrollView>
+			</View>
+		</SafeAreaView>
 	);
 }
 
+const CARD_WIDTH = width * 0.62;
+
 const styles = StyleSheet.create({
-	headerImage: {
-		color: '#808080',
-		position: 'absolute',
+	safeArea: {
+		flex: 1,
+		backgroundColor: "#05071A",
 	},
-	titleContainer: {
-		flexDirection: 'row',
+	scrollView: {
+		flex: 4,
+	},
+	scrollContent: {
+		paddingBottom: 200,
+	},
+
+	/* ── Header ── */
+	header: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		paddingHorizontal: 24,
+		paddingTop: 20,
+		paddingBottom: 4,
+	},
+	greeting: {
+		fontSize: 26,
+		fontWeight: "800",
+		color: "#fafafe",
+		letterSpacing: -0.5,
+	},
+	subtitle: {
+		fontSize: 20,
+		color: "#b9b9be",
+		marginTop: 3,
+		fontWeight: "500",
+	},
+	avatar: {
+		width: 46,
+		height: 46,
+		borderRadius: 23,
+		borderWidth: 2,
+		borderColor: "#fff",
+	},
+	avatarBadge: {
+		position: "absolute",
+		bottom: 1,
+		right: 1,
+		width: 11,
+		height: 11,
+		borderRadius: 6,
+		backgroundColor: "#4ADE80",
+		borderWidth: 2,
+		borderColor: "#05071A",
+	},
+
+	/* ── Search ── */
+	searchContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		backgroundColor: "#fff",
+		borderRadius: 18,
+		marginHorizontal: 24,
+		marginTop: 22,
+		marginBottom: 6,
+		paddingLeft: 14,
+		paddingRight: 6,
+		paddingVertical: 6,
+		shadowColor: "#080505",
+		shadowOffset: { width: 0, height: 3 },
+		shadowOpacity: 0.06,
+		shadowRadius: 8,
+		elevation: 3,
+		borderWidth: 1,
+		borderColor: "#f0f0f4",
+	},
+	searchIcon: {
+		marginRight: 8,
+	},
+	searchInput: {
+		flex: 1,
+		fontSize: 14,
+		color: "#333",
+		paddingVertical: 8,
+		fontWeight: "400",
+	},
+	filterBtn: {
+		backgroundColor: "#1a1a2e",
+		borderRadius: 12,
+		padding: 9,
+		marginLeft: 6,
+	},
+
+	/* ── Section Header ── */
+	sectionHeader: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		paddingHorizontal: 24,
+		marginTop: 28,
+		marginBottom: 14,
+	},
+	sectionTitle: {
+		fontSize: 19,
+		fontWeight: "800",
+		color: "#efefff",
+		letterSpacing: -0.3,
+	},
+	viewAll: {
+		fontSize: 13,
+		color: "#aeaeb3",
+		fontWeight: "600",
+	},
+
+	/* ── Tabs ── */
+	tabsRow: {
+		flexDirection: "row",
+		paddingHorizontal: 24,
+		marginBottom: 20,
 		gap: 8,
 	},
-	loadingContainer: {
-		flex: 1,
-		alignItems: 'center',
-		justifyContent: 'center',
-		paddingHorizontal: 20,
+	tab: {
+		paddingHorizontal: 16,
+		paddingVertical: 8,
+		borderRadius: 20,
+		backgroundColor: "#ededf5",
+	},
+	tabActive: {
+		backgroundColor: "#1a1a2e",
+	},
+	tabText: {
+		fontSize: 13,
+		color: "#9a9aaa",
+		fontWeight: "600",
+	},
+	tabTextActive: {
+		color: "#fff",
+	},
+
+	/* ── Cards ── */
+	cardsList: {
+		paddingHorizontal: 24,
+		alignItems: "center",
+	},
+	card: {
+		width: CARD_WIDTH,
+		height: CARD_WIDTH * 1.17,
+		borderRadius: 24,
+		overflow: "hidden",
+		marginBottom: 30,
+		backgroundColor: "#ddd",
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 8 },
+		shadowOpacity: 0.18,
+		shadowRadius: 16,
+		elevation: 8,
+	},
+	cardImage: {
+		width: "100%",
+		height: "100%",
+		resizeMode: "cover",
+	},
+	favoriteBtn: {
+		position: "absolute",
+		top: 14,
+		right: 14,
+		backgroundColor: "rgba(0,0,0,0.28)",
+		borderRadius: 20,
+		padding: 7,
+	},
+	cardOverlay: {
+		position: "absolute",
+		bottom: 0,
+		left: 0,
+		right: 0,
+		paddingHorizontal: 16,
+		paddingVertical: 14,
+		backgroundColor: "rgba(10,10,30,0.52)",
+		backdropFilter: "blur(4px)",
+	},
+	cardName: {
+		fontSize: 16,
+		fontWeight: "800",
+		color: "#fff",
+		letterSpacing: -0.2,
+		marginBottom: 5,
+	},
+	cardMeta: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+	},
+	cardLocationRow: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 3,
+	},
+	cardLocation: {
+		fontSize: 12,
+		color: "#ddd",
+		marginLeft: 2,
+	},
+	ratingRow: {
+		flexDirection: "row",
+		alignItems: "center",
+		backgroundColor: "rgba(255,255,255,0.15)",
+		borderRadius: 10,
+		paddingHorizontal: 7,
+		paddingVertical: 3,
+		gap: 3,
+	},
+	ratingText: {
+		fontSize: 12,
+		color: "#fff",
+		fontWeight: "700",
+		marginLeft: 2,
+	},
+
+	/* ── Bottom Nav ── */
+	bottomNav: {
+		flexDirection: "row",
+		justifyContent: "space-around",
+		alignItems: "center",
+		backgroundColor: "#fff",
+		paddingVertical: 12,
+		paddingBottom: 20,
+		borderTopLeftRadius: 24,
+		borderTopRightRadius: 24,
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: -4 },
+		shadowOpacity: 0.06,
+		shadowRadius: 12,
+		elevation: 10,
+		position: "absolute",
+		bottom: 0,
+		left: 0,
+		right: 0,
+	},
+	navItem: {
+		alignItems: "center",
+		justifyContent: "center",
+		paddingHorizontal: 16,
+		paddingVertical: 4,
+		gap: 4,
+	},
+	navDot: {
+		width: 6,
+		height: 6,
+		borderRadius: 3,
+		backgroundColor: "#FF4E6A",
+		marginTop: 2,
 	},
 });
