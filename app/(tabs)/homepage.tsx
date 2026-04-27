@@ -1,11 +1,11 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
 	Dimensions,
+	FlatList,
 	Image,
 	SafeAreaView,
-	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
@@ -14,6 +14,7 @@ import {
 	View,
 } from "react-native";
 import { FavoritePlace, useFavorites } from "../../favoritesProvider";
+import { useAdaptiveFrameInterval } from "../../hooks/use-adaptive-frame-interval";
 
 const { width } = Dimensions.get("window");
 
@@ -65,8 +66,17 @@ export default function HomeScreen() {
 	const router = useRouter();
 	const { isFavorite, toggleFavorite } = useFavorites();
 	const [activeCategory, setActiveCategory] = useState("Most Viewed");
+	const frameIntervalMs = useAdaptiveFrameInterval();
+	const maxBatchRender = frameIntervalMs <= 8 ? 8 : 6;
 
-	const handleBottomNavPress = (key: string) => {
+	useEffect(() => {
+		PLACES.forEach((place) => {
+			Image.prefetch(place.image);
+		});
+		Image.prefetch(AVATAR_URL);
+	}, []);
+
+	const handleBottomNavPress = useCallback((key: string) => {
 		if (key === "history") {
 			router.replace("/history");
 			return;
@@ -85,9 +95,9 @@ export default function HomeScreen() {
 		if (key === "home") {
 			router.replace("/homepage");
 		}
-	};
+	}, [router]);
 
-	const renderPlaceCard = ({ item }: { item: Place }) => {
+	const renderPlaceCard = useCallback(({ item }: { item: Place }) => {
 		const isFav = isFavorite(item.id);
 		return (
 			<TouchableOpacity style={styles.card} activeOpacity={0.92}>
@@ -122,84 +132,95 @@ export default function HomeScreen() {
 				</View>
 			</TouchableOpacity>
 		);
-	};
+	}, [isFavorite, toggleFavorite]);
+
+	const keyExtractor = useCallback((item: Place) => item.id, []);
 
 	return (
 		<SafeAreaView style={styles.safeArea}>
 			<StatusBar barStyle="dark-content" backgroundColor="#05071A" />
 
-			<ScrollView
+			<FlatList
 				style={styles.scrollView}
+				data={PLACES}
+				renderItem={renderPlaceCard}
+				keyExtractor={keyExtractor}
 				showsVerticalScrollIndicator={false}
 				contentContainerStyle={styles.scrollContent}
-			>
-				{/* ── Top Greeting ── */}
-				<View style={styles.header}>
-					<View>
-						<Text style={styles.greeting}>Hi, {DISPLAY_NAME} 👋</Text>
-						<Text style={styles.subtitle}>Find a Stay, fast!</Text>
-					</View>
-					<TouchableOpacity
-						onPress={() => handleBottomNavPress("profile")}
-						activeOpacity={0.85}
-					>
-						<Image source={{ uri: AVATAR_URL }} style={styles.avatar} />
-						<View style={styles.avatarBadge} />
-					</TouchableOpacity>
-				</View>
-
-				{/* ── Search Bar ── */}
-				<View style={styles.searchContainer}>
-					<Feather
-						name="search"
-						size={18}
-						color="#aaa"
-						style={styles.searchIcon}
-					/>
-					<TextInput
-						style={styles.searchInput}
-						placeholder="Search places"
-						placeholderTextColor="#bbb"
-					/>
-					<TouchableOpacity style={styles.filterBtn} activeOpacity={0.8}>
-						<MaterialIcons name="tune" size={20} color="#fff" />
-					</TouchableOpacity>
-				</View>
-
-				{/* ── Popular Places Header ── */}
-				<View style={styles.sectionHeader}>
-					<Text style={styles.sectionTitle}>Popular places</Text>
-					<TouchableOpacity activeOpacity={0.7}>
-						<Text style={styles.viewAll}>View all</Text>
-					</TouchableOpacity>
-				</View>
-
-				{/* ── Category Tabs ── */}
-				<View style={styles.tabsRow}>
-					{CATEGORIES.map((cat) => {
-						const isActive = activeCategory === cat;
-						return (
+				decelerationRate="normal"
+				scrollEventThrottle={frameIntervalMs}
+				bounces={false}
+				overScrollMode="never"
+				removeClippedSubviews
+				initialNumToRender={4}
+				maxToRenderPerBatch={maxBatchRender}
+				windowSize={7}
+				updateCellsBatchingPeriod={frameIntervalMs}
+				keyboardShouldPersistTaps="handled"
+				ListHeaderComponent={
+					<>
+						{/* ── Top Greeting ── */}
+						<View style={styles.header}>
+							<View>
+								<Text style={styles.greeting}>Hi, {DISPLAY_NAME} 👋</Text>
+								<Text style={styles.subtitle}>Find a Stay, fast!</Text>
+							</View>
 							<TouchableOpacity
-								key={cat}
-								style={[styles.tab, isActive && styles.tabActive]}
-								onPress={() => setActiveCategory(cat)}
-								activeOpacity={0.8}
+								onPress={() => handleBottomNavPress("profile")}
+								activeOpacity={0.85}
 							>
-								<Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-									{cat}
-								</Text>
+								<Image source={{ uri: AVATAR_URL }} style={styles.avatar} />
+								<View style={styles.avatarBadge} />
 							</TouchableOpacity>
-						);
-					})}
-				</View>
+						</View>
 
-				{/* ── Vertical Place Cards ── */}
-				<View style={styles.cardsList}>
-					{PLACES.map((item) => (
-						<React.Fragment key={item.id}>{renderPlaceCard({ item })}</React.Fragment>
-					))}
-				</View>
-			</ScrollView>
+						{/* ── Search Bar ── */}
+						<View style={styles.searchContainer}>
+							<Feather
+								name="search"
+								size={18}
+								color="#6b6e76"
+								style={styles.searchIcon}
+							/>
+							<TextInput
+								style={styles.searchInput}
+								placeholder="Search places"
+								placeholderTextColor="#bbb"
+							/>
+							<TouchableOpacity style={styles.filterBtn} activeOpacity={0.8}>
+								<MaterialIcons name="tune" size={20} color="#fff" />
+							</TouchableOpacity>
+						</View>
+
+						{/* ── Popular Places Header ── */}
+						<View style={styles.sectionHeader}>
+							<Text style={styles.sectionTitle}>Popular places</Text>
+							<TouchableOpacity activeOpacity={0.7}>
+								<Text style={styles.viewAll}>View all</Text>
+							</TouchableOpacity>
+						</View>
+
+						{/* ── Category Tabs ── */}
+						<View style={styles.tabsRow}>
+							{CATEGORIES.map((cat) => {
+								const isActive = activeCategory === cat;
+								return (
+									<TouchableOpacity
+										key={cat}
+										style={[styles.tab, isActive && styles.tabActive]}
+										onPress={() => setActiveCategory(cat)}
+										activeOpacity={0.8}
+									>
+										<Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+											{cat}
+										</Text>
+									</TouchableOpacity>
+								);
+							})}
+						</View>
+					</>
+				}
+			/>
 
 			{/* ── Bottom Navigation Bar ── */}
 			<View style={styles.bottomNav}>
@@ -369,9 +390,6 @@ const styles = StyleSheet.create({
 	},
 
 	/* ── Cards ── */
-	cardsList: {
-		paddingHorizontal: 24,
-	},
 	card: {
 		width: CARD_WIDTH,
 		height: CARD_WIDTH * 1.17,
@@ -452,25 +470,27 @@ const styles = StyleSheet.create({
 		flexDirection: "row",
 		justifyContent: "space-around",
 		alignItems: "center",
-		backgroundColor: "#fff",
-		paddingVertical: 12,
-		paddingBottom: 20,
-		borderTopLeftRadius: 24,
-		borderTopRightRadius: 24,
+		backgroundColor: "rgba(255,255,255,0.98)",
+		paddingVertical: 10,
+		paddingHorizontal: 10,
+		borderRadius: 28,
+		borderWidth: 1,
+		borderColor: "#ececf3",
 		shadowColor: "#000",
-		shadowOffset: { width: 0, height: -4 },
-		shadowOpacity: 0.06,
-		shadowRadius: 12,
-		elevation: 10,
+		shadowOffset: { width: 0, height: 10 },
+		shadowOpacity: 0.14,
+		shadowRadius: 18,
+		elevation: 18,
 		position: "absolute",
-		bottom: 0,
-		left: 0,
-		right: 0,
+		bottom: 16,
+		left: 16,
+		right: 16,
 	},
 	navItem: {
+		flex: 1,
 		alignItems: "center",
 		justifyContent: "center",
-		paddingHorizontal: 16,
+		paddingHorizontal: 8,
 		paddingVertical: 4,
 		gap: 4,
 	},

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useCallback, useEffect } from "react";
 import {
     FlatList,
     Image,
@@ -12,12 +12,25 @@ import {
     View,
 } from "react-native";
 import { FavoritePlace, useFavorites } from "../../favoritesProvider";
+import { useAdaptiveFrameInterval } from "../../hooks/use-adaptive-frame-interval";
+
+const LOVED_CARD_HEIGHT = 260;
+const LOVED_CARD_GAP = 20;
+const LOVED_ITEM_SIZE = LOVED_CARD_HEIGHT + LOVED_CARD_GAP;
 
 export default function LovedScreen() {
 	const router = useRouter();
 	const { favorites, toggleFavorite } = useFavorites();
+	const frameIntervalMs = useAdaptiveFrameInterval();
+	const maxBatchRender = frameIntervalMs <= 8 ? 6 : 5;
 
-	const handleBottomNavPress = (key: string) => {
+	useEffect(() => {
+		favorites.forEach((item) => {
+			Image.prefetch(item.image);
+		});
+	}, [favorites]);
+
+	const handleBottomNavPress = useCallback((key: string) => {
 		if (key === "home") {
 			router.replace("/homepage");
 			return;
@@ -37,9 +50,9 @@ export default function LovedScreen() {
 			router.replace("/profile");
 			return;
 		}
-	};
+	}, [router]);
 
-	const renderLovedPlace = ({ item }: { item: FavoritePlace }) => (
+	const renderLovedPlace = useCallback(({ item }: { item: FavoritePlace }) => (
 		<View style={styles.card}>
 			<Image source={{ uri: item.image }} style={styles.cardImage} />
 			<TouchableOpacity
@@ -64,14 +77,22 @@ export default function LovedScreen() {
 				</View>
 			</View>
 		</View>
-	);
+	), [toggleFavorite]);
+
+	const keyExtractor = useCallback((item: FavoritePlace) => item.id, []);
+
+	const getItemLayout = useCallback((_: ArrayLike<FavoritePlace> | null | undefined, index: number) => ({
+		length: LOVED_ITEM_SIZE,
+		offset: LOVED_ITEM_SIZE * index,
+		index,
+	}), []);
 
 	return (
 		<SafeAreaView style={styles.safeArea}>
 			<StatusBar barStyle="light-content" backgroundColor="#05071A" />
 
 			<View style={styles.header}>
-				<Text style={styles.title}>Loved places</Text>
+				<Text style={styles.title}>Favourites</Text>
 				<Text style={styles.subtitle}>{favorites.length} saved</Text>
 			</View>
 
@@ -79,9 +100,20 @@ export default function LovedScreen() {
 				<FlatList
 					data={favorites}
 					renderItem={renderLovedPlace}
-					keyExtractor={(item) => item.id}
+					keyExtractor={keyExtractor}
+					getItemLayout={getItemLayout}
 					showsVerticalScrollIndicator={false}
 					contentContainerStyle={styles.listContent}
+					decelerationRate="normal"
+					scrollEventThrottle={frameIntervalMs}
+					bounces={false}
+					overScrollMode="never"
+					removeClippedSubviews
+					initialNumToRender={3}
+					maxToRenderPerBatch={maxBatchRender}
+					windowSize={7}
+					updateCellsBatchingPeriod={frameIntervalMs}
+					keyboardShouldPersistTaps="handled"
 				/>
 			) : (
 				<View style={styles.emptyState}>
@@ -158,10 +190,10 @@ const styles = StyleSheet.create({
 		paddingBottom: 120,
 	},
 	card: {
-		height: 260,
+		height: LOVED_CARD_HEIGHT,
 		borderRadius: 24,
 		overflow: "hidden",
-		marginBottom: 20,
+		marginBottom: LOVED_CARD_GAP,
 		backgroundColor: "#ddd",
 		shadowColor: "#000",
 		shadowOffset: { width: 0, height: 8 },
@@ -262,20 +294,21 @@ const styles = StyleSheet.create({
 		flexDirection: "row",
 		justifyContent: "space-around",
 		alignItems: "center",
-		backgroundColor: "#fff",
-		paddingVertical: 12,
-		paddingBottom: 20,
-		borderTopLeftRadius: 24,
-		borderTopRightRadius: 24,
+		backgroundColor: "rgba(255,255,255,0.98)",
+		paddingVertical: 10,
+		paddingHorizontal: 10,
+		borderRadius: 28,
+		borderWidth: 1,
+		borderColor: "#ececf3",
 		shadowColor: "#000",
-		shadowOffset: { width: 0, height: -4 },
-		shadowOpacity: 0.06,
-		shadowRadius: 12,
-		elevation: 10,
+		shadowOffset: { width: 0, height: 10 },
+		shadowOpacity: 0.14,
+		shadowRadius: 18,
+		elevation: 18,
 		position: "absolute",
-		bottom: 0,
-		left: 0,
-		right: 0,
+		bottom: 16,
+		left: 16,
+		right: 16,
 	},
 	navItem: {
 		alignItems: "center",
