@@ -1,8 +1,8 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
 	Dimensions,
-	FlatList,
 	Image,
 	SafeAreaView,
 	ScrollView,
@@ -13,6 +13,7 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
+import { FavoritePlace, useFavorites } from "../../favoritesProvider";
 
 const { width } = Dimensions.get("window");
 
@@ -58,27 +59,36 @@ const PLACES = [
 const AVATAR_URL =
 	"https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&q=80";
 
-type Place = {
-	id: string;
-	name: string;
-	location: string;
-	rating: string;
-	image: string;
-};
+type Place = FavoritePlace;
 
 export default function HomeScreen() {
+	const router = useRouter();
+	const { isFavorite, toggleFavorite } = useFavorites();
 	const [activeCategory, setActiveCategory] = useState("Most Viewed");
-	const [favorites, setFavorites] = useState<string[]>([]);
-	const [activeNav, setActiveNav] = useState("home");
 
-	const toggleFavorite = (id: string) => {
-		setFavorites((prev) =>
-			prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
-		);
+	const handleBottomNavPress = (key: string) => {
+		if (key === "history") {
+			router.replace("/history");
+			return;
+		}
+
+		if (key === "favorites") {
+			router.replace("/loved");
+			return;
+		}
+
+		if (key === "profile") {
+			router.replace("/profile");
+			return;
+		}
+
+		if (key === "home") {
+			router.replace("/homepage");
+		}
 	};
 
 	const renderPlaceCard = ({ item }: { item: Place }) => {
-		const isFav = favorites.includes(item.id);
+		const isFav = isFavorite(item.id);
 		return (
 			<TouchableOpacity style={styles.card} activeOpacity={0.92}>
 				<Image source={{ uri: item.image }} style={styles.cardImage} />
@@ -86,7 +96,7 @@ export default function HomeScreen() {
 				{/* Favorite Button */}
 				<TouchableOpacity
 					style={styles.favoriteBtn}
-					onPress={() => toggleFavorite(item.id)}
+					onPress={() => toggleFavorite(item)}
 					activeOpacity={0.8}
 				>
 					<Ionicons
@@ -129,7 +139,10 @@ export default function HomeScreen() {
 						<Text style={styles.greeting}>Hi, {DISPLAY_NAME} 👋</Text>
 						<Text style={styles.subtitle}>Find a Stay, fast!</Text>
 					</View>
-					<TouchableOpacity activeOpacity={0.85}>
+					<TouchableOpacity
+						onPress={() => handleBottomNavPress("profile")}
+						activeOpacity={0.85}
+					>
 						<Image source={{ uri: AVATAR_URL }} style={styles.avatar} />
 						<View style={styles.avatarBadge} />
 					</TouchableOpacity>
@@ -181,16 +194,11 @@ export default function HomeScreen() {
 				</View>
 
 				{/* ── Vertical Place Cards ── */}
-				<FlatList
-					data={PLACES}
-					renderItem={renderPlaceCard}
-					keyExtractor={(item) => item.id}
-					
-					showsVerticalScrollIndicator={false}
-					contentContainerStyle={styles.cardsList}
-					snapToInterval={CARD_WIDTH + 16}
-					decelerationRate="fast"
-				/>
+				<View style={styles.cardsList}>
+					{PLACES.map((item) => (
+						<React.Fragment key={item.id}>{renderPlaceCard({ item })}</React.Fragment>
+					))}
+				</View>
 			</ScrollView>
 
 			{/* ── Bottom Navigation Bar ── */}
@@ -201,12 +209,12 @@ export default function HomeScreen() {
 					{ key: "favorites", icon: "heart-outline" as const, label: "Saved" },
 					{ key: "profile", icon: "person-outline" as const, label: "Profile" },
 				].map((item) => {
-					const isActive = activeNav === item.key;
+					const isActive = item.key === "home";
 					return (
 						<TouchableOpacity
 							key={item.key}
 							style={styles.navItem}
-							onPress={() => setActiveNav(item.key)}
+							onPress={() => handleBottomNavPress(item.key)}
 							activeOpacity={0.7}
 						>
 							<Ionicons
@@ -363,11 +371,11 @@ const styles = StyleSheet.create({
 	/* ── Cards ── */
 	cardsList: {
 		paddingHorizontal: 24,
-		alignItems: "center",
 	},
 	card: {
 		width: CARD_WIDTH,
 		height: CARD_WIDTH * 1.17,
+		alignSelf: "center",
 		borderRadius: 24,
 		overflow: "hidden",
 		marginBottom: 30,
