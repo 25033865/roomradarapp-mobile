@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Dimensions,
 	FlatList,
@@ -13,12 +13,11 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
+import { useAuth } from "../../authprovider";
 import { FavoritePlace, useFavorites } from "../../favoritesProvider";
 import { useAdaptiveFrameInterval } from "../../hooks/use-adaptive-frame-interval";
 
 const { width } = Dimensions.get("window");
-
-const DISPLAY_NAME = "Mudau";
 
 const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 
@@ -64,10 +63,20 @@ type Place = FavoritePlace;
 
 export default function HomeScreen() {
 	const router = useRouter();
+	const { user } = useAuth();
 	const { isFavorite, toggleFavorite } = useFavorites();
 	const [activeCategory, setActiveCategory] = useState("Most Viewed");
 	const frameIntervalMs = useAdaptiveFrameInterval();
 	const maxBatchRender = frameIntervalMs <= 8 ? 8 : 6;
+	const displayName = useMemo(() => {
+		const profileName = user?.displayName?.trim();
+		if (profileName) {
+			return profileName;
+		}
+
+		const emailName = user?.email?.split("@")[0]?.trim();
+		return emailName || "Guest";
+	}, [user?.displayName, user?.email]);
 
 	useEffect(() => {
 		PLACES.forEach((place) => {
@@ -162,7 +171,7 @@ export default function HomeScreen() {
 						{/* ── Top Greeting ── */}
 						<View style={styles.header}>
 							<View>
-								<Text style={styles.greeting}>Hi, {DISPLAY_NAME} 👋</Text>
+								<Text style={styles.greeting}>Hi, {displayName} 👋</Text>
 								<Text style={styles.subtitle}>Find a Stay, fast!</Text>
 							</View>
 							<TouchableOpacity
