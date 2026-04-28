@@ -67,6 +67,7 @@ export default function HomeScreen() {
 	const { user } = useAuth();
 	const { isFavorite, toggleFavorite } = useFavorites();
 	const [activeCategory, setActiveCategory] = useState("Most Viewed");
+	const [searchQuery, setSearchQuery] = useState("");
 	const frameIntervalMs = useAdaptiveFrameInterval();
 	const maxBatchRender = frameIntervalMs <= 8 ? 8 : 6;
 	const displayName = useMemo(() => {
@@ -106,6 +107,19 @@ export default function HomeScreen() {
 			router.replace("/homepage");
 		}
 	}, [router]);
+
+	const filteredPlaces = useMemo(() => {
+		const normalizedQuery = searchQuery.trim().toLowerCase();
+		if (!normalizedQuery) {
+			return PLACES;
+		}
+
+		return PLACES.filter((place) => {
+			const nameMatch = place.name.toLowerCase().includes(normalizedQuery);
+			const locationMatch = place.location.toLowerCase().includes(normalizedQuery);
+			return nameMatch || locationMatch;
+		});
+	}, [searchQuery]);
 
 	const renderPlaceCard = useCallback(({ item }: { item: Place }) => {
 		const isFav = isFavorite(item.id);
@@ -152,7 +166,7 @@ export default function HomeScreen() {
 
 			<FlatList
 				style={styles.scrollView}
-				data={PLACES}
+				data={filteredPlaces}
 				renderItem={renderPlaceCard}
 				keyExtractor={keyExtractor}
 				showsVerticalScrollIndicator={false}
@@ -167,6 +181,17 @@ export default function HomeScreen() {
 				windowSize={7}
 				updateCellsBatchingPeriod={frameIntervalMs}
 				keyboardShouldPersistTaps="handled"
+				ListEmptyComponent={
+					searchQuery.trim() ? (
+						<View style={styles.emptyResults}>
+							<Ionicons name="search-outline" size={46} color="#9aa0ad" />
+							<Text style={styles.emptyResultsTitle}>No results found</Text>
+							<Text style={styles.emptyResultsText}>
+								Try a different place name or location.
+							</Text>
+						</View>
+					) : null
+				}
 				ListHeaderComponent={
 					<>
 						{/* ── Top Greeting ── */}
@@ -196,6 +221,9 @@ export default function HomeScreen() {
 								style={styles.searchInput}
 								placeholder="Search places"
 								placeholderTextColor="#bbb"
+								value={searchQuery}
+								onChangeText={setSearchQuery}
+								autoCapitalize="none"
 							/>
 							<TouchableOpacity style={styles.filterBtn} activeOpacity={0.8}>
 								<MaterialIcons name="tune" size={20} color="#fff" />
@@ -464,6 +492,26 @@ const styles = StyleSheet.create({
 		fontSize: 12,
 		color: "#ddd",
 		marginLeft: 2,
+	},
+	emptyResults: {
+		alignItems: "center",
+		justifyContent: "center",
+		paddingHorizontal: 24,
+		paddingTop: 38,
+		paddingBottom: 24,
+	},
+	emptyResultsTitle: {
+		fontSize: 19,
+		fontWeight: "800",
+		color: "#f4f5ff",
+		marginTop: 12,
+	},
+	emptyResultsText: {
+		fontSize: 14,
+		color: "#a9abc3",
+		textAlign: "center",
+		marginTop: 6,
+		lineHeight: 20,
 	},
 	ratingRow: {
 		flexDirection: "row",
