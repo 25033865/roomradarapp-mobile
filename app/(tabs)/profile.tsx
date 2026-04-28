@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+	SafeAreaView,
+	StatusBar,
+	StyleSheet,
+	Text,
+	TouchableOpacity,
+	View,
 } from "react-native";
 
 export default function ProfileScreen() {
@@ -52,6 +53,12 @@ export default function ProfileScreen() {
 			</View>
 
 			<View style={styles.bottomNav}>
+				<BlurView
+					intensity={80}
+					tint="light"
+					style={StyleSheet.absoluteFillObject}
+					pointerEvents="none"
+				/>
 				{[
 					{ key: "home", icon: "home-outline" as const },
 					{ key: "history", icon: "time-outline" as const },
@@ -69,7 +76,7 @@ export default function ProfileScreen() {
 							<Ionicons
 								name={isActive ? "person" : item.icon}
 								size={24}
-								color={isActive ? "#1a1a2e" : "#c0c0c0"}
+								color={isActive ? "#1a1a2e" : "#05071A"}
 							/>
 							{isActive && <View style={styles.navDot} />}
 						</TouchableOpacity>
@@ -126,17 +133,18 @@ const styles = StyleSheet.create({
 		flexDirection: "row",
 		justifyContent: "space-around",
 		alignItems: "center",
-		backgroundColor: "rgba(255,255,255,0.98)",
+		backgroundColor: "rgba(255,255,255,0.18)",
 		paddingVertical: 10,
 		paddingHorizontal: 10,
-		borderRadius: 28,
+		borderRadius: 36,
 		borderWidth: 1,
-		borderColor: "#ececf3",
+		borderColor: "rgba(255,255,255,0.55)",
 		shadowColor: "#000",
 		shadowOffset: { width: 0, height: 10 },
 		shadowOpacity: 0.14,
 		shadowRadius: 18,
 		elevation: 18,
+		overflow: "hidden",
 		position: "absolute",
 		bottom: 16,
 		left: 16,

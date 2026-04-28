@@ -1,4 +1,5 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -233,6 +234,12 @@ export default function HomeScreen() {
 
 			{/* ── Bottom Navigation Bar ── */}
 			<View style={styles.bottomNav}>
+				<BlurView
+					intensity={80}
+					tint="light"
+					style={StyleSheet.absoluteFillObject}
+					pointerEvents="none"
+				/>
 				{[
 					{ key: "home", icon: "home" as const, label: "Home" },
 					{ key: "history", icon: "time-outline" as const, label: "History" },
@@ -250,7 +257,7 @@ export default function HomeScreen() {
 							<Ionicons
 								name={isActive && item.key === "home" ? "home" : item.icon}
 								size={24}
-								color={isActive ? "#1a1a2e" : "#c0c0c0"}
+								color={isActive ? "#1a1a2e" : "#05071A"}
 							/>
 							{isActive && <View style={styles.navDot} />}
 						</TouchableOpacity>
@@ -479,17 +486,18 @@ const styles = StyleSheet.create({
 		flexDirection: "row",
 		justifyContent: "space-around",
 		alignItems: "center",
-		backgroundColor: "rgba(255,255,255,0.98)",
+		backgroundColor: "rgba(255,255,255,0.18)",
 		paddingVertical: 10,
 		paddingHorizontal: 10,
-		borderRadius: 28,
+		borderRadius: 36,
 		borderWidth: 1,
-		borderColor: "#ececf3",
-		shadowColor: "#000",
+		borderColor: "rgba(255,255,255,0.18)",
+		shadowColor: "#000000",
 		shadowOffset: { width: 0, height: 10 },
 		shadowOpacity: 0.14,
 		shadowRadius: 18,
 		elevation: 18,
+		overflow: "hidden",
 		position: "absolute",
 		bottom: 16,
 		left: 16,
