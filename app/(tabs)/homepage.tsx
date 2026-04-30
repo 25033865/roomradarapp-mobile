@@ -25,9 +25,9 @@ const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 const PLACES = [
 	{
 		id: "1",
-		name: "Mount Fuji",
-		location: "Tokyo, Japan",
-		rating: "4.8",
+		name: "Royal Palm",
+		location: "Maniini, Thohoyandou",
+		rating: "4.2",
 		image:
 			"https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=600&q=80",
 	},
@@ -125,33 +125,35 @@ export default function HomeScreen() {
 		const isFav = isFavorite(item.id);
 		return (
 			<TouchableOpacity style={styles.card} activeOpacity={0.92}>
-				<Image source={{ uri: item.image }} style={styles.cardImage} />
+				<View style={styles.cardImageWrap}>
+					<Image source={{ uri: item.image }} style={styles.cardImage} />
 
-				{/* Favorite Button */}
-				<TouchableOpacity
-					style={styles.favoriteBtn}
-					onPress={() => toggleFavorite(item)}
-					activeOpacity={0.8}
-				>
-					<Ionicons
-						name={isFav ? "heart" : "heart-outline"}
-						size={18}
-						color={isFav ? "#FF4E6A" : "#fff"}
-					/>
-				</TouchableOpacity>
+					<TouchableOpacity
+						style={styles.favoriteBtn}
+						onPress={() => toggleFavorite(item)}
+						activeOpacity={0.8}
+					>
+						<Ionicons
+							name={isFav ? "heart" : "heart-outline"}
+							size={18}
+							color={isFav ? "#FF4E6A" : "#fff"}
+						/>
+					</TouchableOpacity>
+				</View>
 
-				{/* Overlay Info */}
-				<View style={styles.cardOverlay}>
-					<Text style={styles.cardName}>{item.name}</Text>
-					<View style={styles.cardMeta}>
-						<View style={styles.cardLocationRow}>
-							<Ionicons name="location-sharp" size={12} color="#e0e0e0" />
-							<Text style={styles.cardLocation}>{item.location}</Text>
-						</View>
-						<View style={styles.ratingRow}>
-							<Ionicons name="star" size={12} color="#FFD700" />
-							<Text style={styles.ratingText}>{item.rating}</Text>
-						</View>
+				<View style={styles.cardInfo}>
+					<Text style={styles.cardName} numberOfLines={2}>
+						{item.name}
+					</Text>
+					<View style={styles.cardLocationRow}>
+						<Ionicons name="location-sharp" size={14} color="#9EA7C0" />
+						<Text style={styles.cardLocation} numberOfLines={2}>
+							{item.location}
+						</Text>
+					</View>
+					<View style={styles.ratingRow}>
+						<Ionicons name="star" size={13} color="#FFD700" />
+						<Text style={styles.ratingText}>{item.rating}</Text>
 					</View>
 				</View>
 			</TouchableOpacity>
@@ -296,7 +298,9 @@ export default function HomeScreen() {
 	);
 }
 
-const CARD_WIDTH = width * 0.62;
+const CARD_WIDTH = width - 48;
+const CARD_IMAGE_WIDTH = Math.min(width * 0.34, 142);
+const CARD_HEIGHT = Math.max(CARD_IMAGE_WIDTH * 1.12, 150);
 
 const styles = StyleSheet.create({
 	safeArea: {
@@ -436,17 +440,23 @@ const styles = StyleSheet.create({
 	/* ── Cards ── */
 	card: {
 		width: CARD_WIDTH,
-		height: CARD_WIDTH * 1.17,
+		height: CARD_HEIGHT,
 		alignSelf: "center",
-		borderRadius: 24,
+		flexDirection: "row",
+		borderRadius: 18,
 		overflow: "hidden",
 		marginBottom: 30,
-		backgroundColor: "#ddd",
+		backgroundColor: "#101427",
 		shadowColor: "#000",
 		shadowOffset: { width: 0, height: 8 },
 		shadowOpacity: 0.18,
 		shadowRadius: 16,
-		elevation: 8,
+		elevation: 2,
+	},
+	cardImageWrap: {
+		width: CARD_IMAGE_WIDTH,
+		height: CARD_HEIGHT,
+		backgroundColor: "#11182f",
 	},
 	cardImage: {
 		width: "100%",
@@ -455,43 +465,36 @@ const styles = StyleSheet.create({
 	},
 	favoriteBtn: {
 		position: "absolute",
-		top: 14,
-		right: 14,
+		top: 12,
+		right: 12,
 		backgroundColor: "rgba(0,0,0,0.28)",
 		borderRadius: 20,
 		padding: 7,
 	},
-	cardOverlay: {
-		position: "absolute",
-		bottom: 0,
-		left: 0,
-		right: 0,
+	cardInfo: {
+		flex: 1,
+		justifyContent: "center",
 		paddingHorizontal: 16,
-		paddingVertical: 14,
-		backgroundColor: "rgba(10,10,30,0.52)",
-		backdropFilter: "blur(4px)",
+		paddingVertical: 16,
 	},
 	cardName: {
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "800",
 		color: "#fff",
 		letterSpacing: -0.2,
-		marginBottom: 5,
-	},
-	cardMeta: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
+		marginBottom: 10,
 	},
 	cardLocationRow: {
 		flexDirection: "row",
-		alignItems: "center",
-		gap: 3,
+		alignItems: "flex-start",
+		gap: 5,
+		marginBottom: 14,
 	},
 	cardLocation: {
-		fontSize: 12,
-		color: "#ddd",
-		marginLeft: 2,
+		flex: 1,
+		fontSize: 13,
+		lineHeight: 18,
+		color: "#c2c8d8",
 	},
 	emptyResults: {
 		alignItems: "center",
@@ -514,12 +517,13 @@ const styles = StyleSheet.create({
 		lineHeight: 20,
 	},
 	ratingRow: {
+		alignSelf: "flex-start",
 		flexDirection: "row",
 		alignItems: "center",
-		backgroundColor: "rgba(255,255,255,0.15)",
+		backgroundColor: "rgba(255,255,255,0.1)",
 		borderRadius: 10,
-		paddingHorizontal: 7,
-		paddingVertical: 3,
+		paddingHorizontal: 8,
+		paddingVertical: 4,
 		gap: 3,
 	},
 	ratingText: {
