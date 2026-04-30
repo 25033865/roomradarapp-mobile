@@ -300,7 +300,7 @@ export default function HomeScreen() {
 
 const CARD_WIDTH = width - 48;
 const CARD_IMAGE_WIDTH = Math.min(width * 0.34, 142);
-const CARD_HEIGHT = Math.max(CARD_IMAGE_WIDTH * 1.12, 150);
+const CARD_HEIGHT = Math.max(CARD_IMAGE_WIDTH * 1.95, 255);
 
 const styles = StyleSheet.create({
 	safeArea: {
