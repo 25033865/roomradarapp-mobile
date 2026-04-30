@@ -25,7 +25,7 @@ const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 const PLACES = [
 	{
 		id: "1",
-		name: "Royal Palm",
+		name: "Royal Palm Guest House",
 		location: "Maniini, Thohoyandou",
 		rating: "4.2",
 		image:
@@ -124,13 +124,31 @@ export default function HomeScreen() {
 	const renderPlaceCard = useCallback(({ item }: { item: Place }) => {
 		const isFav = isFavorite(item.id);
 		return (
-			<TouchableOpacity style={styles.card} activeOpacity={0.92}>
+			<TouchableOpacity
+				style={styles.card}
+				activeOpacity={0.92}
+				onPress={() =>
+					router.push({
+						pathname: "/place-details",
+						params: {
+							id: item.id,
+							name: item.name,
+							location: item.location,
+							rating: item.rating,
+							image: item.image,
+						},
+					})
+				}
+			>
 				<View style={styles.cardImageWrap}>
 					<Image source={{ uri: item.image }} style={styles.cardImage} />
 
 					<TouchableOpacity
 						style={styles.favoriteBtn}
-						onPress={() => toggleFavorite(item)}
+						onPress={(event) => {
+							event.stopPropagation();
+							toggleFavorite(item);
+						}}
 						activeOpacity={0.8}
 					>
 						<Ionicons
@@ -158,7 +176,7 @@ export default function HomeScreen() {
 				</View>
 			</TouchableOpacity>
 		);
-	}, [isFavorite, toggleFavorite]);
+	}, [isFavorite, router, toggleFavorite]);
 
 	const keyExtractor = useCallback((item: Place) => item.id, []);
 
@@ -473,9 +491,12 @@ const styles = StyleSheet.create({
 	},
 	cardInfo: {
 		flex: 1,
-		justifyContent: "center",
+		justifyContent: "flex-start",
 		paddingHorizontal: 16,
 		paddingVertical: 16,
+		paddingTop: 12,
+		paddingBottom: 52,
+		position: "relative",
 	},
 	cardName: {
 		fontSize: 18,
@@ -517,7 +538,9 @@ const styles = StyleSheet.create({
 		lineHeight: 20,
 	},
 	ratingRow: {
-		alignSelf: "flex-start",
+		position: "absolute",
+		right: 16,
+		bottom: 16,
 		flexDirection: "row",
 		alignItems: "center",
 		backgroundColor: "rgba(255,255,255,0.1)",
