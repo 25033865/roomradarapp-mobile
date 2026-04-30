@@ -17,15 +17,13 @@ import {
 import { useAuth } from "../../authprovider";
 import { FavoritePlace, useFavorites } from "../../favoritesProvider";
 import { useAdaptiveFrameInterval } from "../../hooks/use-adaptive-frame-interval";
-
 const { width } = Dimensions.get("window");
-
 const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 
 const PLACES = [
 	{
 		id: "1",
-		name: "Royal Palm Guest House",
+		name: "Royal Palm ",
 		location: "Maniini, Thohoyandou",
 		rating: "4.2",
 		image:
@@ -123,32 +121,27 @@ export default function HomeScreen() {
 
 	const renderPlaceCard = useCallback(({ item }: { item: Place }) => {
 		const isFav = isFavorite(item.id);
+		const navigate = () =>
+			router.push({
+				pathname: "/place-details",
+				params: {
+					id: item.id,
+					name: item.name,
+					location: item.location,
+					rating: item.rating,
+					image: item.image,
+				},
+			});
+
 		return (
-			<TouchableOpacity
-				style={styles.card}
-				activeOpacity={0.92}
-				onPress={() =>
-					router.push({
-						pathname: "/place-details",
-						params: {
-							id: item.id,
-							name: item.name,
-							location: item.location,
-							rating: item.rating,
-							image: item.image,
-						},
-					})
-				}
-			>
-				<View style={styles.cardImageWrap}>
+			<View style={styles.card}>
+				<TouchableOpacity style={styles.cardImageWrap} activeOpacity={0.9} onPress={navigate}>
 					<Image source={{ uri: item.image }} style={styles.cardImage} />
 
+					{/* Favorite Button */}
 					<TouchableOpacity
 						style={styles.favoriteBtn}
-						onPress={(event) => {
-							event.stopPropagation();
-							toggleFavorite(item);
-						}}
+						onPress={() => toggleFavorite(item)}
 						activeOpacity={0.8}
 					>
 						<Ionicons
@@ -157,24 +150,24 @@ export default function HomeScreen() {
 							color={isFav ? "#FF4E6A" : "#fff"}
 						/>
 					</TouchableOpacity>
-				</View>
+				</TouchableOpacity>
 
-				<View style={styles.cardInfo}>
+				<TouchableOpacity style={styles.cardInfo} activeOpacity={0.92} onPress={navigate}>
 					<Text style={styles.cardName} numberOfLines={2}>
 						{item.name}
 					</Text>
 					<View style={styles.cardLocationRow}>
-						<Ionicons name="location-sharp" size={14} color="#9EA7C0" />
+						<Ionicons name="location-sharp" size={12} color="#e0e0e0" />
 						<Text style={styles.cardLocation} numberOfLines={2}>
 							{item.location}
 						</Text>
 					</View>
 					<View style={styles.ratingRow}>
-						<Ionicons name="star" size={13} color="#FFD700" />
+						<Ionicons name="star" size={12} color="#FFD700" />
 						<Text style={styles.ratingText}>{item.rating}</Text>
 					</View>
-				</View>
-			</TouchableOpacity>
+				</TouchableOpacity>
+			</View>
 		);
 	}, [isFavorite, router, toggleFavorite]);
 
@@ -214,29 +207,19 @@ export default function HomeScreen() {
 				}
 				ListHeaderComponent={
 					<>
-						{/* ── Top Greeting ── */}
 						<View style={styles.header}>
 							<View>
 								<Text style={styles.greeting}>Hi, {displayName} 👋</Text>
 								<Text style={styles.subtitle}>Find a Stay, fast!</Text>
 							</View>
-							<TouchableOpacity
-								onPress={() => handleBottomNavPress("profile")}
-								activeOpacity={0.85}
-							>
+							<TouchableOpacity onPress={() => handleBottomNavPress("profile")} activeOpacity={0.85}>
 								<Image source={{ uri: AVATAR_URL }} style={styles.avatar} />
 								<View style={styles.avatarBadge} />
 							</TouchableOpacity>
 						</View>
 
-						{/* ── Search Bar ── */}
 						<View style={styles.searchContainer}>
-							<Feather
-								name="search"
-								size={18}
-								color="#6b6e76"
-								style={styles.searchIcon}
-							/>
+							<Feather name="search" size={18} color="#6b6e76" style={styles.searchIcon} />
 							<TextInput
 								style={styles.searchInput}
 								placeholder="Search places"
@@ -250,7 +233,6 @@ export default function HomeScreen() {
 							</TouchableOpacity>
 						</View>
 
-						{/* ── Popular Places Header ── */}
 						<View style={styles.sectionHeader}>
 							<Text style={styles.sectionTitle}>Popular places</Text>
 							<TouchableOpacity activeOpacity={0.7}>
@@ -258,7 +240,6 @@ export default function HomeScreen() {
 							</TouchableOpacity>
 						</View>
 
-						{/* ── Category Tabs ── */}
 						<View style={styles.tabsRow}>
 							{CATEGORIES.map((cat) => {
 								const isActive = activeCategory === cat;
@@ -316,9 +297,7 @@ export default function HomeScreen() {
 	);
 }
 
-const CARD_WIDTH = width - 48;
-const CARD_IMAGE_WIDTH = Math.min(width * 0.34, 142);
-const CARD_HEIGHT = Math.max(CARD_IMAGE_WIDTH * 1.95, 255);
+const CARD_WIDTH = width * 0.62;
 
 const styles = StyleSheet.create({
 	safeArea: {
@@ -458,64 +437,66 @@ const styles = StyleSheet.create({
 	/* ── Cards ── */
 	card: {
 		width: CARD_WIDTH,
-		height: CARD_HEIGHT,
+		height: CARD_WIDTH * 1.17,
 		alignSelf: "center",
-		flexDirection: "row",
-		borderRadius: 18,
+		borderRadius: 24,
 		overflow: "hidden",
 		marginBottom: 30,
-		backgroundColor: "#101427",
+		backgroundColor: "#ddd",
 		shadowColor: "#000",
 		shadowOffset: { width: 0, height: 8 },
 		shadowOpacity: 0.18,
 		shadowRadius: 16,
-		elevation: 2,
-	},
-	cardImageWrap: {
-		width: CARD_IMAGE_WIDTH,
-		height: CARD_HEIGHT,
-		backgroundColor: "#11182f",
+		elevation: 8,
 	},
 	cardImage: {
 		width: "100%",
 		height: "100%",
 		resizeMode: "cover",
 	},
+	cardImageWrap: {
+		backgroundColor: "#11182f",
+	},
+	cardInfo: { flex: 1, justifyContent: "flex-start", paddingHorizontal: 16, paddingVertical: 16, paddingTop: 12 },
 	favoriteBtn: {
 		position: "absolute",
-		top: 12,
-		right: 12,
+		top: 14,
+		right: 14,
 		backgroundColor: "rgba(0,0,0,0.28)",
 		borderRadius: 20,
 		padding: 7,
 	},
-	cardInfo: {
-		flex: 1,
-		justifyContent: "flex-start",
+	cardOverlay: {
+		position: "absolute",
+		bottom: 0,
+		left: 0,
+		right: 0,
 		paddingHorizontal: 16,
-		paddingVertical: 16,
-		paddingTop: 12,
-		paddingBottom: 52,
-		position: "relative",
+		paddingVertical: 14,
+		backgroundColor: "rgba(10,10,30,0.52)",
+		backdropFilter: "blur(4px)",
 	},
 	cardName: {
-		fontSize: 18,
+		fontSize: 16,
 		fontWeight: "800",
 		color: "#fff",
 		letterSpacing: -0.2,
-		marginBottom: 10,
+		marginBottom: 5,
+	},
+	cardMeta: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
 	},
 	cardLocationRow: {
 		flexDirection: "row",
-		alignItems: "flex-start",
-		gap: 5,
-		marginBottom: 14,
+		alignItems: "center",
+		gap: 3,
 	},
 	cardLocation: {
-		flex: 1,
-		fontSize: 13,
-		lineHeight: 18,
-		color: "#c2c8d8",
+		fontSize: 12,
+		color: "#ddd",
+		marginLeft: 2,
 	},
 	emptyResults: {
 		alignItems: "center",
@@ -538,15 +519,12 @@ const styles = StyleSheet.create({
 		lineHeight: 20,
 	},
 	ratingRow: {
-		position: "absolute",
-		right: 16,
-		bottom: 16,
 		flexDirection: "row",
 		alignItems: "center",
-		backgroundColor: "rgba(255,255,255,0.1)",
+		backgroundColor: "rgba(255,255,255,0.15)",
 		borderRadius: 10,
-		paddingHorizontal: 8,
-		paddingVertical: 4,
+		paddingHorizontal: 7,
+		paddingVertical: 3,
 		gap: 3,
 	},
 	ratingText: {
