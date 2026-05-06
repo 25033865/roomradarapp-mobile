@@ -1,5 +1,6 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -23,7 +24,7 @@ const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 const PLACES = [
 	{
 		id: "1",
-		name: "Royal Palm ",
+		name: "Royal Palm Guest House",
 		location: "Maniini, Thohoyandou",
 		rating: "4.2",
 		image:
@@ -135,37 +136,44 @@ export default function HomeScreen() {
 
 		return (
 			<View style={styles.card}>
-				<TouchableOpacity style={styles.cardImageWrap} activeOpacity={0.9} onPress={navigate}>
+				<TouchableOpacity style={styles.cardPressable} activeOpacity={0.9} onPress={navigate}>
 					<Image source={{ uri: item.image }} style={styles.cardImage} />
 
-					{/* Favorite Button */}
-					<TouchableOpacity
-						style={styles.favoriteBtn}
-						onPress={() => toggleFavorite(item)}
-						activeOpacity={0.8}
-					>
-						<Ionicons
-							name={isFav ? "heart" : "heart-outline"}
-							size={18}
-							color={isFav ? "#FF4E6A" : "#fff"}
-						/>
-					</TouchableOpacity>
+					<LinearGradient
+						colors={["rgba(5,7,26,0)", "rgba(5,7,26,0.85)"]}
+						style={styles.cardScrim}
+						pointerEvents="none"
+					/>
+
+					<View style={styles.cardOverlay}>
+						<Text style={styles.cardName} numberOfLines={2}>
+							{item.name}
+						</Text>
+						<View style={styles.cardMeta}>
+							<View style={styles.cardLocationRow}>
+								<Ionicons name="location-sharp" size={12} color="#e0e0e0" />
+								<Text style={styles.cardLocation} numberOfLines={1}>
+									{item.location}
+								</Text>
+							</View>
+							<View style={styles.ratingRow}>
+								<Ionicons name="star" size={12} color="#FFD700" />
+								<Text style={styles.ratingText}>{item.rating}</Text>
+							</View>
+						</View>
+					</View>
 				</TouchableOpacity>
 
-				<TouchableOpacity style={styles.cardInfo} activeOpacity={0.92} onPress={navigate}>
-					<Text style={styles.cardName} numberOfLines={2}>
-						{item.name}
-					</Text>
-					<View style={styles.cardLocationRow}>
-						<Ionicons name="location-sharp" size={12} color="#e0e0e0" />
-						<Text style={styles.cardLocation} numberOfLines={2}>
-							{item.location}
-						</Text>
-					</View>
-					<View style={styles.ratingRow}>
-						<Ionicons name="star" size={12} color="#FFD700" />
-						<Text style={styles.ratingText}>{item.rating}</Text>
-					</View>
+				<TouchableOpacity
+					style={styles.favoriteBtn}
+					onPress={() => toggleFavorite(item)}
+					activeOpacity={0.8}
+				>
+					<Ionicons
+						name={isFav ? "heart" : "heart-outline"}
+						size={18}
+						color={isFav ? "#FF4E6A" : "#fff"}
+					/>
 				</TouchableOpacity>
 			</View>
 		);
@@ -443,10 +451,10 @@ const styles = StyleSheet.create({
 		overflow: "hidden",
 		marginBottom: 30,
 		backgroundColor: "#ddd",
-		shadowColor: "#000",
+		shadowColor: "#000000",
 		shadowOffset: { width: 0, height: 8 },
 		shadowOpacity: 0.18,
-		shadowRadius: 16,
+		shadowRadius: 12,
 		elevation: 8,
 	},
 	cardImage: {
@@ -454,10 +462,10 @@ const styles = StyleSheet.create({
 		height: "100%",
 		resizeMode: "cover",
 	},
-	cardImageWrap: {
+	cardPressable: {
+		flex: 1,
 		backgroundColor: "#11182f",
 	},
-	cardInfo: { flex: 1, justifyContent: "flex-start", paddingHorizontal: 16, paddingVertical: 16, paddingTop: 12 },
 	favoriteBtn: {
 		position: "absolute",
 		top: 14,
@@ -465,6 +473,14 @@ const styles = StyleSheet.create({
 		backgroundColor: "rgba(0,0,0,0.28)",
 		borderRadius: 20,
 		padding: 7,
+		zIndex: 2,
+	},
+	cardScrim: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
+		height: "48%",
 	},
 	cardOverlay: {
 		position: "absolute",
@@ -472,9 +488,8 @@ const styles = StyleSheet.create({
 		left: 0,
 		right: 0,
 		paddingHorizontal: 16,
-		paddingVertical: 14,
-		backgroundColor: "rgba(10,10,30,0.52)",
-		backdropFilter: "blur(4px)",
+		paddingTop: 34,
+		paddingBottom: 14,
 	},
 	cardName: {
 		fontSize: 16,
@@ -491,11 +506,14 @@ const styles = StyleSheet.create({
 	cardLocationRow: {
 		flexDirection: "row",
 		alignItems: "center",
+		flex: 1,
 		gap: 3,
+		minWidth: 0,
 	},
 	cardLocation: {
 		fontSize: 12,
 		color: "#ddd",
+		flex: 1,
 		marginLeft: 2,
 	},
 	emptyResults: {
