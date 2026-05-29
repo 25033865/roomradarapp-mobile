@@ -1,153 +1,75 @@
 import {
-    ActionCodeSettings,
     createUserWithEmailAndPassword,
-    isSignInWithEmailLink,
-    reload,
-    sendEmailVerification,
     sendPasswordResetEmail,
-    sendSignInLinkToEmail,
     signInWithEmailAndPassword,
-    signInWithEmailLink,
     signOut,
     updateProfile,
-    User,
 } from 'firebase/auth';
-import { auth } from './firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
+import { auth, functions } from './firebaseConfig';
 
-const emailLoginContinueUrl =
-    process.env.EXPO_PUBLIC_EMAIL_LOGIN_CONTINUE_URL ||
-    'https://roomradarapp-50fb1.firebaseapp.com/login-approval';
+export type OtpChallenge = {
+    expiresAt: number;
+    resendAvailableAt: number;
+};
 
-const emailLoginAndroidPackageName =
-    process.env.EXPO_PUBLIC_EMAIL_LOGIN_ANDROID_PACKAGE_NAME ||
-    process.env.EXPO_PUBLIC_ANDROID_PACKAGE_NAME ||
-    'com.anonymous.roomradarappmobile';
+type SendOtpResponse = {
+    status: 'sent';
+    expiresAt: number;
+    resendAvailableAt: number;
+};
 
-const emailLoginIosBundleId =
-    process.env.EXPO_PUBLIC_EMAIL_LOGIN_IOS_BUNDLE_ID ||
-    process.env.EXPO_PUBLIC_IOS_BUNDLE_ID;
+type VerifyOtpResponse = {
+    verified: true;
+};
 
-const emailLinkParamKeys = [
-    'link',
-    'deep_link_id',
-    'url',
-    'continueUrl',
-    'continue_url',
-    'redirectUrl',
-    'redirect_url',
-] as const;
+const sendEmailOtpCallable = httpsCallable(functions, 'sendEmailOtp');
+const verifyEmailOtpCallable = httpsCallable(functions, 'verifyEmailOtp');
 
-const extractEmailLinkCandidates = (incomingLink: string): string[] => {
-    const queue: string[] = [];
-    const seen = new Set<string>();
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
-    const enqueue = (value: string | null | undefined) => {
-        if (!value) {
-            return;
-        }
+const requestEmailOtp = async (
+    email: string,
+    purpose: 'signup' | 'login',
+    isResend = false
+): Promise<OtpChallenge> => {
+    const normalizedEmail = normalizeEmail(email);
 
-        const normalized = value
-            .trim()
-            .replace(/&amp;/gi, '&')
-            .replace(/^['"]|['"]$/g, '');
-
-        if (!normalized) {
-            return;
-        }
-
-        const variants = new Set<string>([normalized]);
-        let decoded = normalized;
-
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-            try {
-                const nextDecoded = decodeURIComponent(decoded);
-
-                if (!nextDecoded || nextDecoded === decoded) {
-                    break;
-                }
-
-                variants.add(nextDecoded);
-                decoded = nextDecoded;
-            } catch {
-                break;
-            }
-        }
-
-        for (const variant of variants) {
-            if (seen.has(variant)) {
-                continue;
-            }
-
-            seen.add(variant);
-            queue.push(variant);
-        }
-    };
-
-    enqueue(incomingLink);
-
-    while (queue.length > 0) {
-        const current = queue.shift();
-
-        if (!current) {
-            continue;
-        }
-
-        let parsed: URL;
-
-        try {
-            parsed = new URL(current, emailLoginContinueUrl);
-        } catch {
-            continue;
-        }
-
-        for (const paramKey of emailLinkParamKeys) {
-            enqueue(parsed.searchParams.get(paramKey));
-        }
-
-        const mode = parsed.searchParams.get('mode');
-        const oobCode = parsed.searchParams.get('oobCode');
-        const apiKey = parsed.searchParams.get('apiKey');
-
-        if (mode === 'signIn' && oobCode && apiKey) {
-            const canonicalLink = `${parsed.origin}${parsed.pathname}?mode=${encodeURIComponent(
-                mode
-            )}&oobCode=${encodeURIComponent(oobCode)}&apiKey=${encodeURIComponent(
-                apiKey
-            )}`;
-
-            enqueue(canonicalLink);
-        }
+    if (!normalizedEmail) {
+        throw new Error('MISSING_EMAIL');
     }
 
-    const rankCandidate = (candidate: string): number => {
-        let score = 0;
+    const result = await sendEmailOtpCallable({
+        email: normalizedEmail,
+        purpose,
+        isResend,
+    });
 
-        if (candidate.includes('mode=signIn')) {
-            score += 2;
-        }
-
-        if (candidate.includes('oobCode=')) {
-            score += 2;
-        }
-
-        if (candidate.includes('apiKey=')) {
-            score += 1;
-        }
-
-        return score;
+    const data = result.data as SendOtpResponse;
+    return {
+        expiresAt: data.expiresAt,
+        resendAvailableAt: data.resendAvailableAt,
     };
-
-    return Array.from(seen).sort((left, right) => rankCandidate(right) - rankCandidate(left));
 };
 
 export const registerUser = async (
     username: string,
     email: string,
     password: string
-): Promise<User> => {
+): Promise<OtpChallenge> => {
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail) {
+        throw new Error('MISSING_EMAIL');
+    }
+
+    if (!password) {
+        throw new Error('MISSING_PASSWORD');
+    }
+
     const userCredential = await createUserWithEmailAndPassword(
         auth,
-        email.trim(),
+        normalizedEmail,
         password
     );
 
@@ -157,42 +79,58 @@ export const registerUser = async (
         });
     }
 
-    await sendEmailVerification(userCredential.user);
-    await signOut(auth);
-
-    return userCredential.user;
+    return requestEmailOtp(normalizedEmail, 'signup');
 };
 
 export const loginUser = async (
     email: string,
     password: string
-): Promise<User> => {
-    const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-    );
+): Promise<OtpChallenge> => {
+    const normalizedEmail = normalizeEmail(email);
 
-    await reload(userCredential.user);
-
-    if (!userCredential.user.emailVerified) {
-        await sendEmailVerification(userCredential.user);
-        await signOut(auth);
-        throw new Error('EMAIL_VERIFICATION_LINK_SENT');
+    if (!normalizedEmail) {
+        throw new Error('MISSING_EMAIL');
     }
 
-    return userCredential.user;
+    if (!password) {
+        throw new Error('MISSING_PASSWORD');
+    }
+
+    await signInWithEmailAndPassword(auth, normalizedEmail, password);
+
+    return requestEmailOtp(normalizedEmail, 'login');
+};
+
+export const resendEmailOtp = async (
+    email: string,
+    purpose: 'signup' | 'login'
+): Promise<OtpChallenge> => requestEmailOtp(email, purpose, true);
+
+export const verifyEmailOtp = async (
+    email: string,
+    code: string
+): Promise<VerifyOtpResponse> => {
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedCode = code.trim();
+
+    if (!normalizedEmail) {
+        throw new Error('MISSING_EMAIL');
+    }
+
+    if (!/^[0-9]{6}$/.test(normalizedCode)) {
+        throw new Error('INVALID_OTP_FORMAT');
+    }
+
+    const result = await verifyEmailOtpCallable({
+        email: normalizedEmail,
+        code: normalizedCode,
+    });
+
+    return result.data as VerifyOtpResponse;
 };
 
 export const logoutUser = async (): Promise<void> => {
     await signOut(auth);
-};
-
-export const sendVerificationEmail = async (): Promise<void> => {
-    if (!auth.currentUser) {
-        throw new Error('No user logged in');
-    }
-    await sendEmailVerification(auth.currentUser);
 };
 
 export const requestPasswordReset = async (email: string): Promise<void> => {
@@ -203,124 +141,4 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
     }
 
     await sendPasswordResetEmail(auth, normalizedEmail);
-};
-
-export const resendVerificationForCredentials = async (
-    email: string,
-    password: string
-): Promise<'sent' | 'already_verified'> => {
-    const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-    );
-
-    await reload(userCredential.user);
-
-    if (userCredential.user.emailVerified) {
-        await signOut(auth);
-        return 'already_verified';
-    }
-
-    await sendEmailVerification(userCredential.user);
-    await signOut(auth);
-    return 'sent';
-};
-
-export const checkEmailVerification = async (): Promise<boolean> => {
-    if (!auth.currentUser) return false;
-    await reload(auth.currentUser);
-    return auth.currentUser.emailVerified;
-};
-
-export const startEmailLoginVerification = async (
-    email: string,
-    password: string
-): Promise<void> => {
-    const normalizedEmail = email.trim();
-
-    if (!normalizedEmail) {
-        throw new Error('MISSING_EMAIL');
-    }
-
-    if (!password) {
-        throw new Error('MISSING_PASSWORD');
-    }
-
-    const userCredential = await signInWithEmailAndPassword(
-        auth,
-        normalizedEmail,
-        password
-    );
-
-    try {
-        await reload(userCredential.user);
-
-        if (!userCredential.user.emailVerified) {
-            await sendEmailVerification(userCredential.user);
-            throw new Error('EMAIL_VERIFICATION_LINK_SENT');
-        }
-
-        const actionCodeSettings: ActionCodeSettings = {
-            url: emailLoginContinueUrl,
-            handleCodeInApp: true,
-            android: {
-                packageName: emailLoginAndroidPackageName,
-                installApp: true,
-            },
-        };
-
-        if (emailLoginIosBundleId) {
-            actionCodeSettings.iOS = {
-                bundleId: emailLoginIosBundleId,
-            };
-        }
-
-        await sendSignInLinkToEmail(auth, normalizedEmail, actionCodeSettings);
-    } finally {
-        await signOut(auth);
-    }
-};
-
-export const completeEmailLoginVerification = async (
-    email: string,
-    emailLink: string
-): Promise<User> => {
-    const normalizedEmail = email.trim();
-    const normalizedEmailLink = emailLink.trim();
-
-    if (!normalizedEmail) {
-        throw new Error('MISSING_EMAIL');
-    }
-
-    if (!normalizedEmailLink) {
-        throw new Error('MISSING_EMAIL_LOGIN_LINK');
-    }
-
-    const emailLinkCandidates = extractEmailLinkCandidates(normalizedEmailLink);
-    let lastCompletionError: unknown = null;
-
-    for (const candidateLink of emailLinkCandidates) {
-        if (!isSignInWithEmailLink(auth, candidateLink)) {
-            continue;
-        }
-
-        try {
-            const userCredential = await signInWithEmailLink(
-                auth,
-                normalizedEmail,
-                candidateLink
-            );
-
-            return userCredential.user;
-        } catch (error) {
-            lastCompletionError = error;
-        }
-    }
-
-    if (lastCompletionError) {
-        throw lastCompletionError;
-    }
-
-    throw new Error('INVALID_EMAIL_LOGIN_LINK');
 };

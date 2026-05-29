@@ -4,44 +4,47 @@ import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  KeyboardAvoidingView,
-  LayoutChangeEvent,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleProp,
-  StyleSheet,
-  Text,
-  TextInput,
-  TextStyle,
-  useWindowDimensions,
-  View,
-  ViewStyle,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    KeyboardAvoidingView,
+    LayoutChangeEvent,
+    Platform,
+    Pressable,
+    ScrollView,
+    StatusBar,
+    StyleProp,
+    StyleSheet,
+    Text,
+    TextInput,
+    TextInputProps,
+    TextStyle,
+    useWindowDimensions,
+    View,
+    ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../authprovider';
 import {
-  loginUser,
-  registerUser,
-  requestPasswordReset,
-  resendVerificationForCredentials,
+    loginUser,
+    registerUser,
+    requestPasswordReset,
+    resendEmailOtp,
+    verifyEmailOtp,
 } from '../../authService';
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { user, initializing, isEmailVerified } = useAuth();
+  const { user, initializing, isOtpVerified, markOtpVerified } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -51,6 +54,10 @@ export default function AuthScreen() {
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [switchTrackWidth, setSwitchTrackWidth] = useState(0);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpResendAvailableAt, setOtpResendAvailableAt] = useState<number | null>(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [otpClock, setOtpClock] = useState(Date.now());
 
   const { width, height } = useWindowDimensions();
   const { isSmallPhone, isTablet, isLargeTablet } = getDeviceFlags(width);
@@ -111,10 +118,28 @@ export default function AuthScreen() {
   }, [mode, switchAnim]);
 
   useEffect(() => {
-    if (!initializing && user && isEmailVerified) {
+    if (!initializing && user && isOtpVerified) {
       router.replace('/homepage');
     }
-  }, [initializing, isEmailVerified, router, user]);
+  }, [initializing, isOtpVerified, router, user]);
+
+  useEffect(() => {
+    if (!user || isOtpVerified) {
+      setOtpClock(Date.now());
+      setOtpCode('');
+      setOtpExpiresAt(null);
+      setOtpResendAvailableAt(null);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setOtpClock(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOtpVerified, user]);
+
+  const isOtpStep = Boolean(user && !isOtpVerified);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -136,13 +161,32 @@ export default function AuthScreen() {
     outputRange: [0.72, 1],
   });
 
-  const subtitle = useMemo(
-    () =>
-      mode === 'login'
-        ? 'Welcome back. Sign in to continue your journey.'
-        : 'Create your account and start building something amazing.',
-    [mode]
-  );
+  const otpEmail = useMemo(() => {
+    if (user?.email) {
+      return user.email.trim();
+    }
+
+    if (loginEmail.trim()) {
+      return loginEmail.trim();
+    }
+
+    if (signupEmail.trim()) {
+      return signupEmail.trim();
+    }
+
+    return '';
+  }, [loginEmail, signupEmail, user]);
+
+  const subtitle = useMemo(() => {
+    if (isOtpStep) {
+      const label = otpEmail || 'your email';
+      return `We sent a 6-digit code to ${label}. Enter it below to continue.`;
+    }
+
+    return mode === 'login'
+      ? 'Welcome back. Sign in to continue your journey.'
+      : 'Create your account and start building something amazing.';
+  }, [isOtpStep, mode, otpEmail]);
 
   const responsiveStyles = useMemo(() => {
     const baseSize = Math.min(width, height);
@@ -259,6 +303,9 @@ export default function AuthScreen() {
       resendText: {
         fontSize: clamp(width * 0.035, 12, 14),
       },
+      otpMetaText: {
+        fontSize: clamp(width * 0.034, 12, 14),
+      },
       primaryButton: {
         height: clamp(baseSize * 0.09, 52, 62),
         borderRadius: clamp(baseSize * 0.03, 16, 20),
@@ -306,6 +353,30 @@ export default function AuthScreen() {
     [responsiveStyles]
   );
 
+  const resendCooldownSeconds = useMemo(() => {
+    if (!otpResendAvailableAt) {
+      return 0;
+    }
+
+    return Math.max(0, Math.ceil((otpResendAvailableAt - otpClock) / 1000));
+  }, [otpClock, otpResendAvailableAt]);
+
+  const expiresInSeconds = useMemo(() => {
+    if (!otpExpiresAt) {
+      return 0;
+    }
+
+    return Math.max(0, Math.ceil((otpExpiresAt - otpClock) / 1000));
+  }, [otpClock, otpExpiresAt]);
+
+  const formatCountdown = useCallback((totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.max(0, totalSeconds % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }, []);
+
+  const canResendOtp = resendCooldownSeconds <= 0;
+
   function getAuthErrorMessage(error: unknown): string {
     if (error instanceof Error && error.message === 'MISSING_EMAIL') {
       return 'Enter your email address first.';
@@ -315,8 +386,52 @@ export default function AuthScreen() {
       return 'Enter your password first.';
     }
 
-    if (error instanceof Error && error.message === 'EMAIL_VERIFICATION_LINK_SENT') {
-      return 'Your email is not verified yet. We sent a new verification link. Please verify it, then sign in again.';
+    if (error instanceof Error && error.message === 'INVALID_OTP_FORMAT') {
+      return 'Enter the 6-digit code from your email.';
+    }
+
+    if (error instanceof FirebaseError) {
+      const details = (error as FirebaseError & {
+        details?: {
+          code?: string;
+          attemptsRemaining?: number;
+          resendAvailableAt?: number;
+        };
+      }).details;
+
+      if (details?.code === 'OTP_RESEND_COOLDOWN') {
+        const waitSeconds = details.resendAvailableAt
+          ? Math.max(0, Math.ceil((details.resendAvailableAt - Date.now()) / 1000))
+          : 60;
+        return `Please wait ${formatCountdown(waitSeconds)} before requesting a new code.`;
+      }
+
+      if (details?.code === 'OTP_EXPIRED') {
+        return 'That code expired. Request a new one.';
+      }
+
+      if (details?.code === 'OTP_INVALID') {
+        if (typeof details.attemptsRemaining === 'number') {
+          return `Invalid code. ${details.attemptsRemaining} attempt(s) remaining.`;
+        }
+        return 'Invalid code. Please try again.';
+      }
+
+      if (details?.code === 'OTP_ATTEMPTS_EXHAUSTED') {
+        return 'Too many attempts. Request a new code.';
+      }
+
+      if (details?.code === 'OTP_NOT_FOUND') {
+        return 'No active code found. Request a new one.';
+      }
+
+      if (details?.code === 'EMAIL_PROVIDER_NOT_CONFIGURED') {
+        return 'Email delivery is not configured yet. Please contact support.';
+      }
+
+      if (details?.code === 'EMAIL_DELIVERY_FAILED') {
+        return 'We could not deliver the code. Please try again.';
+      }
     }
 
     if (!(error instanceof FirebaseError)) {
@@ -340,8 +455,21 @@ export default function AuthScreen() {
         return 'Network error. Check your connection and try again.';
       case 'auth/too-many-requests':
         return 'Too many attempts. Please wait a bit and try again.';
+      case 'functions/unauthenticated':
+        return 'Please sign in again to continue.';
+      case 'functions/unavailable':
+        return 'The verification service is unavailable right now. Try again shortly.';
+      case 'functions/invalid-argument':
+        return 'Please double-check your verification details and try again.';
+      case 'functions/resource-exhausted':
+        return 'Please wait before requesting another code.';
+      case 'functions/not-found':
+        return 'The verification service is not deployed yet. Please try again later.';
       default:
-        return error.message || 'Authentication failed. Please try again.';
+        if (error.code?.startsWith('functions/')) {
+          return 'The verification service is unavailable right now. Try again shortly.';
+        }
+        return 'Authentication failed. Please try again.';
     }
   }
 
@@ -358,8 +486,10 @@ export default function AuthScreen() {
     setIsSubmitting(true);
 
     try {
-      await loginUser(loginEmail, loginPassword);
-      router.replace('/homepage');
+      const challenge = await loginUser(loginEmail, loginPassword);
+      setOtpCode('');
+      setOtpExpiresAt(challenge.expiresAt);
+      setOtpResendAvailableAt(challenge.resendAvailableAt);
     } catch (error) {
       Alert.alert('Sign in failed', getAuthErrorMessage(error));
     } finally {
@@ -367,38 +497,8 @@ export default function AuthScreen() {
     }
   };
 
-  const onResendVerification = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset) {
-      return;
-    }
-
-    if (!loginEmail.trim() || !loginPassword) {
-      Alert.alert('Missing information', 'Enter your email and password, then tap resend.');
-      return;
-    }
-
-    setIsResendingVerification(true);
-
-    try {
-      const result = await resendVerificationForCredentials(loginEmail, loginPassword);
-
-      if (result === 'already_verified') {
-        Alert.alert('Already Verified', 'Your email is already verified. You can sign in now.');
-      } else {
-        Alert.alert(
-          'Verification Email Sent',
-          `We sent a fresh verification link to ${loginEmail.trim()}. Please check your inbox.`
-        );
-      }
-    } catch (error) {
-      Alert.alert('Unable to resend', getAuthErrorMessage(error));
-    } finally {
-      setIsResendingVerification(false);
-    }
-  };
-
   const onForgotPassword = async () => {
-    if (isSubmitting || isResendingVerification || isSendingReset) {
+    if (isSubmitting || isSendingReset) {
       return;
     }
 
@@ -422,6 +522,75 @@ export default function AuthScreen() {
     }
   };
 
+  const onChangeOtpCode = (value: string) => {
+    const cleaned = value.replace(/[^0-9]/g, '').slice(0, 6);
+    setOtpCode(cleaned);
+  };
+
+  const onResendOtp = async () => {
+    if (isSendingOtp || isVerifyingOtp) {
+      return;
+    }
+
+    if (!otpEmail) {
+      Alert.alert('Missing email', 'Please sign in again to request a code.');
+      return;
+    }
+
+    if (resendCooldownSeconds > 0) {
+      Alert.alert(
+        'Please wait',
+        `You can request a new code in ${formatCountdown(resendCooldownSeconds)}.`
+      );
+      return;
+    }
+
+    setIsSendingOtp(true);
+
+    try {
+      const challenge = await resendEmailOtp(
+        otpEmail,
+        mode === 'signup' ? 'signup' : 'login'
+      );
+      setOtpCode('');
+      setOtpExpiresAt(challenge.expiresAt);
+      setOtpResendAvailableAt(challenge.resendAvailableAt);
+      Alert.alert('Code sent', `We sent a new code to ${otpEmail}.`);
+    } catch (error) {
+      Alert.alert('Unable to send code', getAuthErrorMessage(error));
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const onVerifyOtp = async () => {
+    if (isVerifyingOtp) {
+      return;
+    }
+
+    if (!otpEmail) {
+      Alert.alert('Missing email', 'Please sign in again to verify.');
+      return;
+    }
+
+    if (otpCode.length !== 6) {
+      Alert.alert('Invalid code', 'Enter the 6-digit code from your email.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+
+    try {
+      await verifyEmailOtp(otpEmail, otpCode);
+      await markOtpVerified();
+      router.replace('/homepage');
+    } catch (error) {
+      Alert.alert('Verification failed', getAuthErrorMessage(error));
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
   const onSignup = async () => {
     if (isSubmitting) {
       return;
@@ -440,23 +609,13 @@ export default function AuthScreen() {
     setIsSubmitting(true);
 
     try {
-      await registerUser(fullName, signupEmail, signupPassword);
-      // Show verification email sent message
+      const challenge = await registerUser(fullName, signupEmail, signupPassword);
+      setOtpCode('');
+      setOtpExpiresAt(challenge.expiresAt);
+      setOtpResendAvailableAt(challenge.resendAvailableAt);
       Alert.alert(
-        'Verification Email Sent',
-        `We've sent a verification link to ${signupEmail.trim()}. Please verify your email before signing in.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Switch to login mode so they can attempt to login after verification
-              setMode('login');
-              setSignupEmail('');
-              setSignupPassword('');
-              setConfirmPassword('');
-            },
-          },
-        ]
+        'Verification Code Sent',
+        `We sent a 6-digit code to ${signupEmail.trim()}. Enter it to finish creating your account.`
       );
     } catch (error) {
       Alert.alert('Sign up failed', getAuthErrorMessage(error));
@@ -556,7 +715,7 @@ export default function AuthScreen() {
               />
             </View>
             <Text style={[styles.title, responsiveStyles.title]}>
-              {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+              {isOtpStep ? 'Verify Your Email' : mode === 'login' ? 'Welcome Back' : 'Create Account'}
             </Text>
             <Text style={[styles.subtitle, responsiveStyles.subtitle]}>{subtitle}</Text>
           </Animated.View>
@@ -571,41 +730,101 @@ export default function AuthScreen() {
               },
             ]}
           >
-            <View style={[styles.switchOuter, responsiveStyles.switchOuter]} onLayout={onSwitchOuterLayout}>
-              <Animated.View
-                style={[
-                  styles.switchPill,
-                  responsiveStyles.switchPill,
-                  { transform: [{ translateX: switchTranslateX }] },
-                ]}
-              />
-
-              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => onChangeMode('login')}>
-                <Animated.Text
+            {!isOtpStep ? (
+              <View style={[styles.switchOuter, responsiveStyles.switchOuter]} onLayout={onSwitchOuterLayout}>
+                <Animated.View
                   style={[
-                    styles.switchText,
-                    responsiveStyles.switchText,
-                    loginTabTextStyle,
-                    { opacity: loginOpacity },
-                  ]}>
-                  Sign In
-                </Animated.Text>
-              </Pressable>
+                    styles.switchPill,
+                    responsiveStyles.switchPill,
+                    { transform: [{ translateX: switchTranslateX }] },
+                  ]}
+                />
 
-              <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => onChangeMode('signup')}>
-                <Animated.Text
+                <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => onChangeMode('login')}>
+                  <Animated.Text
+                    style={[
+                      styles.switchText,
+                      responsiveStyles.switchText,
+                      loginTabTextStyle,
+                      { opacity: loginOpacity },
+                    ]}>
+                    Sign In
+                  </Animated.Text>
+                </Pressable>
+
+                <Pressable style={[styles.switchBtn, responsiveStyles.switchBtn]} onPress={() => onChangeMode('signup')}>
+                  <Animated.Text
+                    style={[
+                      styles.switchText,
+                      responsiveStyles.switchText,
+                      signupTabTextStyle,
+                      { opacity: signupOpacity },
+                    ]}>
+                    Sign Up
+                  </Animated.Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {isOtpStep ? (
+              <View style={[styles.formWrap, responsiveStyles.formWrap]}>
+                <InputField
+                  icon="keypad-outline"
+                  placeholder="6-digit code"
+                  value={otpCode}
+                  onChangeText={onChangeOtpCode}
+                  keyboardType="numeric"
+                  autoCapitalize="none"
+                  textContentType="oneTimeCode"
+                  maxLength={6}
+                  {...inputFieldResponsiveProps}
+                />
+
+                <Text style={[styles.otpMetaText, responsiveStyles.otpMetaText]}>
+                  {expiresInSeconds > 0
+                    ? `Code expires in ${formatCountdown(expiresInSeconds)}`
+                    : 'Code expired. Request a new one.'}
+                </Text>
+
+                <Pressable
                   style={[
-                    styles.switchText,
-                    responsiveStyles.switchText,
-                    signupTabTextStyle,
-                    { opacity: signupOpacity },
-                  ]}>
-                  Sign Up
-                </Animated.Text>
-              </Pressable>
-            </View>
+                    styles.primaryButton,
+                    responsiveStyles.primaryButton,
+                    isVerifyingOtp && styles.primaryButtonDisabled,
+                  ]}
+                  onPress={onVerifyOtp}
+                  disabled={isVerifyingOtp}
+                >
+                  <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
+                    {isVerifyingOtp ? 'Verifying...' : 'Verify Code'}
+                  </Text>
+                  {isVerifyingOtp ? (
+                    <ActivityIndicator size="small" color="#0B1220" />
+                  ) : (
+                    <Ionicons name="arrow-forward" size={18} color="#0B1220" />
+                  )}
+                </Pressable>
 
-            {mode === 'login' ? (
+                <Pressable
+                  style={[
+                    styles.secondaryButton,
+                    (!canResendOtp || isSendingOtp) && styles.secondaryButtonDisabled,
+                  ]}
+                  onPress={onResendOtp}
+                  disabled={!canResendOtp || isSendingOtp}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    {isSendingOtp
+                      ? 'Sending code...'
+                      : canResendOtp
+                      ? otpExpiresAt
+                        ? 'Resend code'
+                        : 'Send code'
+                      : `Resend in ${formatCountdown(resendCooldownSeconds)}`}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : mode === 'login' ? (
               <View style={[styles.formWrap, responsiveStyles.formWrap]}>
                 <InputField
                   icon="mail-outline"
@@ -632,20 +851,10 @@ export default function AuthScreen() {
                 <Pressable
                   style={styles.forgotBtn}
                   onPress={onForgotPassword}
-                  disabled={isSubmitting || isResendingVerification || isSendingReset}
+                  disabled={isSubmitting || isSendingReset}
                 >
                   <Text style={[styles.forgotText, responsiveStyles.forgotText]}>
                     {isSendingReset ? 'Sending reset link...' : 'Forgot password?'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.resendBtn}
-                  onPress={onResendVerification}
-                  disabled={isSubmitting || isResendingVerification}
-                >
-                  <Text style={[styles.resendText, responsiveStyles.resendText]}>
-                    {isResendingVerification ? 'Sending verification link...' : 'Resend verification email'}
                   </Text>
                 </Pressable>
 
@@ -733,39 +942,45 @@ export default function AuthScreen() {
               </View>
             )}
 
-            <View style={[styles.dividerRow, responsiveStyles.dividerRow]}>
-              <View style={styles.divider} />
-              <Text style={[styles.dividerText, responsiveStyles.dividerText]}>or continue with</Text>
-              <View style={styles.divider} />
-            </View>
+            {!isOtpStep ? (
+              <View style={[styles.dividerRow, responsiveStyles.dividerRow]}>
+                <View style={styles.divider} />
+                <Text style={[styles.dividerText, responsiveStyles.dividerText]}>or continue with</Text>
+                <View style={styles.divider} />
+              </View>
+            ) : null}
 
-            <View style={[styles.socialRow, responsiveStyles.socialRow]}>
-              <SocialButton
-                icon="logo-google"
-                label="Google"
-                buttonStyle={responsiveStyles.socialButton}
-                textStyle={responsiveStyles.socialText}
-              />
-              <SocialButton
-                icon="logo-apple"
-                label="Apple"
-                buttonStyle={responsiveStyles.socialButton}
-                textStyle={responsiveStyles.socialText}
-              />
-            </View>
+            {!isOtpStep ? (
+              <View style={[styles.socialRow, responsiveStyles.socialRow]}>
+                <SocialButton
+                  icon="logo-google"
+                  label="Google"
+                  buttonStyle={responsiveStyles.socialButton}
+                  textStyle={responsiveStyles.socialText}
+                />
+                <SocialButton
+                  icon="logo-apple"
+                  label="Apple"
+                  buttonStyle={responsiveStyles.socialButton}
+                  textStyle={responsiveStyles.socialText}
+                />
+              </View>
+            ) : null}
 
-            <View style={[styles.bottomRow, responsiveStyles.bottomRow]}>
-              <Text style={[styles.bottomText, responsiveStyles.bottomText]}>
-                {mode === 'login'
-                  ? "Don't have an account?"
-                  : 'Already have an account?'}
-              </Text>
-              <Pressable onPress={() => onChangeMode(mode === 'login' ? 'signup' : 'login')}>
-                <Text style={[styles.bottomLink, responsiveStyles.bottomLink]}>
-                  {mode === 'login' ? ' Sign Up' : ' Sign In'}
+            {!isOtpStep ? (
+              <View style={[styles.bottomRow, responsiveStyles.bottomRow]}>
+                <Text style={[styles.bottomText, responsiveStyles.bottomText]}>
+                  {mode === 'login'
+                    ? "Don't have an account?"
+                    : 'Already have an account?'}
                 </Text>
-              </Pressable>
-            </View>
+                <Pressable onPress={() => onChangeMode(mode === 'login' ? 'signup' : 'login')}>
+                  <Text style={[styles.bottomLink, responsiveStyles.bottomLink]}>
+                    {mode === 'login' ? ' Sign Up' : ' Sign In'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -781,6 +996,8 @@ type InputFieldProps = {
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'email-address' | 'numeric';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  maxLength?: number;
+  textContentType?: TextInputProps['textContentType'];
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightPress?: () => void;
   containerStyle?: StyleProp<ViewStyle>;
@@ -796,6 +1013,8 @@ function InputField({
   secureTextEntry,
   keyboardType = 'default',
   autoCapitalize = 'sentences',
+  maxLength,
+  textContentType,
   rightIcon,
   onRightPress,
   containerStyle,
@@ -820,6 +1039,8 @@ function InputField({
         secureTextEntry={Boolean(secureTextEntry)}
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
+        maxLength={maxLength}
+        textContentType={textContentType}
       />
 
       {rightIcon ? (
@@ -1023,6 +1244,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  otpMetaText: {
+    color: '#9FB0C7',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   primaryButton: {
     height: 58,
     borderRadius: 18,
@@ -1040,6 +1267,23 @@ const styles = StyleSheet.create({
     color: '#0B1220',
     fontSize: 16,
     fontWeight: '800',
+  },
+  secondaryButton: {
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0B1224',
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  secondaryButtonText: {
+    color: '#EAF2FF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   dividerRow: {
     flexDirection: 'row',

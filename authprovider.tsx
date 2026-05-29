@@ -1,43 +1,73 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { checkEmailVerification, sendVerificationEmail } from './authService';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
 import { auth } from './firebaseConfig';
 
 interface AuthContextType {
   user: User | null;
   initializing: boolean;
-  isEmailVerified: boolean;
-  sendVerificationEmail: () => Promise<void>;
-  checkEmailVerification: () => Promise<boolean>;
+  isOtpVerified: boolean;
+  markOtpVerified: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   initializing: true,
-  isEmailVerified: false,
-  sendVerificationEmail: async () => {},
-  checkEmailVerification: async () => false,
+  isOtpVerified: false,
+  markOtpVerified: async () => {},
 });
+
+const getTrustedDeviceKey = (uid: string) => `roomradar:trusted-device:${uid}`;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState<boolean>(true);
-  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
+  const [isOtpVerified, setIsOtpVerified] = useState<boolean>(false);
+  const lastUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+
       if (firebaseUser) {
-        setIsEmailVerified(firebaseUser.emailVerified);
+        const trustedValue = await AsyncStorage.getItem(
+          getTrustedDeviceKey(firebaseUser.uid)
+        );
+        const isTrusted = trustedValue === 'true';
+        setIsOtpVerified(isTrusted);
+        lastUserIdRef.current = firebaseUser.uid;
       } else {
-        setIsEmailVerified(false);
+        if (lastUserIdRef.current) {
+          await AsyncStorage.removeItem(getTrustedDeviceKey(lastUserIdRef.current));
+        }
+        lastUserIdRef.current = null;
+        setIsOtpVerified(false);
       }
+
       setInitializing(false);
     });
 
     return unsubscribe;
+  }, []);
+
+  const markOtpVerified = useCallback(async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      throw new Error('NO_ACTIVE_USER');
+    }
+
+    await AsyncStorage.setItem(getTrustedDeviceKey(currentUser.uid), 'true');
+    setIsOtpVerified(true);
   }, []);
 
   return (
@@ -45,9 +75,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         user,
         initializing,
-        isEmailVerified,
-        sendVerificationEmail,
-        checkEmailVerification,
+        isOtpVerified,
+        markOtpVerified,
       }}
     >
       {children}

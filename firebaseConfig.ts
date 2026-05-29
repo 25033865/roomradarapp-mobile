@@ -7,6 +7,7 @@ import {
     type Auth,
     type Persistence,
 } from 'firebase/auth';
+import { getFunctions, type Functions } from 'firebase/functions';
 
 const firebaseConfig = {
     apiKey: "AIzaSyDvlTDJguVeaxQ2xyzZYRsjgkp8ssrTghg",
@@ -20,6 +21,7 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 let auth: Auth;
+let functions: Functions;
 
 type ReactNativePersistenceFactory = (
     storage: typeof AsyncStorage
@@ -28,6 +30,9 @@ type ReactNativePersistenceFactory = (
 const getReactNativePersistence = (
     FirebaseAuth as { getReactNativePersistence?: ReactNativePersistenceFactory }
 ).getReactNativePersistence;
+
+const functionsRegion =
+    process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'us-central1';
 
 try {
     if (getReactNativePersistence) {
@@ -41,4 +46,6 @@ try {
     auth = getAuth(app);
 }
 
-export { app, auth };
+functions = getFunctions(app, functionsRegion);
+
+export { app, auth, functions };
