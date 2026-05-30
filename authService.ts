@@ -1,62 +1,22 @@
 import {
     createUserWithEmailAndPassword,
+    reload,
+    sendEmailVerification,
     sendPasswordResetEmail,
     signInWithEmailAndPassword,
     signOut,
     updateProfile,
+    User,
 } from 'firebase/auth';
-import { httpsCallable } from 'firebase/functions';
-import { auth, functions } from './firebaseConfig';
-
-export type OtpChallenge = {
-    expiresAt: number;
-    resendAvailableAt: number;
-};
-
-type SendOtpResponse = {
-    status: 'sent';
-    expiresAt: number;
-    resendAvailableAt: number;
-};
-
-type VerifyOtpResponse = {
-    verified: true;
-};
-
-const sendEmailOtpCallable = httpsCallable(functions, 'sendEmailOtp');
-const verifyEmailOtpCallable = httpsCallable(functions, 'verifyEmailOtp');
+import { auth } from './firebaseConfig';
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
-
-const requestEmailOtp = async (
-    email: string,
-    purpose: 'signup' | 'login',
-    isResend = false
-): Promise<OtpChallenge> => {
-    const normalizedEmail = normalizeEmail(email);
-
-    if (!normalizedEmail) {
-        throw new Error('MISSING_EMAIL');
-    }
-
-    const result = await sendEmailOtpCallable({
-        email: normalizedEmail,
-        purpose,
-        isResend,
-    });
-
-    const data = result.data as SendOtpResponse;
-    return {
-        expiresAt: data.expiresAt,
-        resendAvailableAt: data.resendAvailableAt,
-    };
-};
 
 export const registerUser = async (
     username: string,
     email: string,
     password: string
-): Promise<OtpChallenge> => {
+): Promise<User> => {
     const normalizedEmail = normalizeEmail(email);
 
     if (!normalizedEmail) {
@@ -79,13 +39,14 @@ export const registerUser = async (
         });
     }
 
-    return requestEmailOtp(normalizedEmail, 'signup');
+    await sendEmailVerification(userCredential.user);
+    return userCredential.user;
 };
 
 export const loginUser = async (
     email: string,
     password: string
-): Promise<OtpChallenge> => {
+): Promise<User> => {
     const normalizedEmail = normalizeEmail(email);
 
     if (!normalizedEmail) {
@@ -96,41 +57,41 @@ export const loginUser = async (
         throw new Error('MISSING_PASSWORD');
     }
 
-    await signInWithEmailAndPassword(auth, normalizedEmail, password);
+    const userCredential = await signInWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        password
+    );
 
-    return requestEmailOtp(normalizedEmail, 'login');
-};
+    await reload(userCredential.user);
 
-export const resendEmailOtp = async (
-    email: string,
-    purpose: 'signup' | 'login'
-): Promise<OtpChallenge> => requestEmailOtp(email, purpose, true);
-
-export const verifyEmailOtp = async (
-    email: string,
-    code: string
-): Promise<VerifyOtpResponse> => {
-    const normalizedEmail = normalizeEmail(email);
-    const normalizedCode = code.trim();
-
-    if (!normalizedEmail) {
-        throw new Error('MISSING_EMAIL');
+    if (!userCredential.user.emailVerified) {
+        await sendEmailVerification(userCredential.user);
+        throw new Error('EMAIL_VERIFICATION_LINK_SENT');
     }
 
-    if (!/^[0-9]{6}$/.test(normalizedCode)) {
-        throw new Error('INVALID_OTP_FORMAT');
-    }
-
-    const result = await verifyEmailOtpCallable({
-        email: normalizedEmail,
-        code: normalizedCode,
-    });
-
-    return result.data as VerifyOtpResponse;
+    return userCredential.user;
 };
 
 export const logoutUser = async (): Promise<void> => {
     await signOut(auth);
+};
+
+export const sendVerificationEmail = async (): Promise<void> => {
+    if (!auth.currentUser) {
+        throw new Error('NO_ACTIVE_USER');
+    }
+
+    await sendEmailVerification(auth.currentUser);
+};
+
+export const checkEmailVerification = async (): Promise<boolean> => {
+    if (!auth.currentUser) {
+        return false;
+    }
+
+    await reload(auth.currentUser);
+    return auth.currentUser.emailVerified;
 };
 
 export const requestPasswordReset = async (email: string): Promise<void> => {

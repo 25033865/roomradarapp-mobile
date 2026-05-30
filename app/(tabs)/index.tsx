@@ -1,12 +1,15 @@
 import { clamp, getDeviceFlags } from '@/constants/responsive';
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { FirebaseError } from 'firebase/app';
+import { applyActionCode } from 'firebase/auth';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Animated,
+    AppState,
     Easing,
     Image,
     KeyboardAvoidingView,
@@ -31,20 +34,25 @@ import {
     loginUser,
     registerUser,
     requestPasswordReset,
-    resendEmailOtp,
-    verifyEmailOtp,
 } from '../../authService';
+import { auth } from '../../firebaseConfig';
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { user, initializing, isOtpVerified, markOtpVerified } = useAuth();
+  const {
+    user,
+    initializing,
+    isEmailVerified,
+    sendVerificationEmail,
+    checkEmailVerification,
+  } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -54,10 +62,6 @@ export default function AuthScreen() {
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [switchTrackWidth, setSwitchTrackWidth] = useState(0);
-  const [otpCode, setOtpCode] = useState('');
-  const [otpResendAvailableAt, setOtpResendAvailableAt] = useState<number | null>(null);
-  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
-  const [otpClock, setOtpClock] = useState(Date.now());
 
   const { width, height } = useWindowDimensions();
   const { isSmallPhone, isTablet, isLargeTablet } = getDeviceFlags(width);
@@ -67,6 +71,7 @@ export default function AuthScreen() {
   const scaleAnim = useRef(new Animated.Value(0.96)).current;
   const floatingAnim = useRef(new Animated.Value(0)).current;
   const switchAnim = useRef(new Animated.Value(0)).current;
+  const lastHandledOobCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -118,28 +123,12 @@ export default function AuthScreen() {
   }, [mode, switchAnim]);
 
   useEffect(() => {
-    if (!initializing && user && isOtpVerified) {
+    if (!initializing && user && isEmailVerified) {
       router.replace('/homepage');
     }
-  }, [initializing, isOtpVerified, router, user]);
+  }, [initializing, isEmailVerified, router, user]);
 
-  useEffect(() => {
-    if (!user || isOtpVerified) {
-      setOtpClock(Date.now());
-      setOtpCode('');
-      setOtpExpiresAt(null);
-      setOtpResendAvailableAt(null);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setOtpClock(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isOtpVerified, user]);
-
-  const isOtpStep = Boolean(user && !isOtpVerified);
+  const isVerificationStep = Boolean(user && !isEmailVerified);
 
   const bubbleTranslateY = floatingAnim.interpolate({
     inputRange: [0, 1],
@@ -161,7 +150,7 @@ export default function AuthScreen() {
     outputRange: [0.72, 1],
   });
 
-  const otpEmail = useMemo(() => {
+  const verificationEmail = useMemo(() => {
     if (user?.email) {
       return user.email.trim();
     }
@@ -178,15 +167,15 @@ export default function AuthScreen() {
   }, [loginEmail, signupEmail, user]);
 
   const subtitle = useMemo(() => {
-    if (isOtpStep) {
-      const label = otpEmail || 'your email';
-      return `We sent a 6-digit code to ${label}. Enter it below to continue.`;
+    if (isVerificationStep) {
+      const label = verificationEmail || 'your email';
+      return `We sent a verification link to ${label}. Open it to finish setting up your account.`;
     }
 
     return mode === 'login'
       ? 'Welcome back. Sign in to continue your journey.'
       : 'Create your account and start building something amazing.';
-  }, [isOtpStep, mode, otpEmail]);
+  }, [isVerificationStep, mode, verificationEmail]);
 
   const responsiveStyles = useMemo(() => {
     const baseSize = Math.min(width, height);
@@ -353,125 +342,153 @@ export default function AuthScreen() {
     [responsiveStyles]
   );
 
-  const resendCooldownSeconds = useMemo(() => {
-    if (!otpResendAvailableAt) {
-      return 0;
+  const getAuthErrorMessage = useCallback(
+    (error: unknown): string => {
+      const emailForMessage = verificationEmail || loginEmail.trim() || signupEmail.trim() || 'your email';
+
+      if (error instanceof Error && error.message === 'MISSING_EMAIL') {
+        return 'Enter your email address first.';
+      }
+
+      if (error instanceof Error && error.message === 'MISSING_PASSWORD') {
+        return 'Enter your password first.';
+      }
+
+      if (error instanceof Error && error.message === 'EMAIL_VERIFICATION_LINK_SENT') {
+        return `We sent a verification link to ${emailForMessage}. Please verify your email before signing in.`;
+      }
+
+      if (error instanceof Error && error.message === 'NO_ACTIVE_USER') {
+        return 'Please sign in again to continue.';
+      }
+
+      if (!(error instanceof FirebaseError)) {
+        return 'Something went wrong. Please try again.';
+      }
+
+      switch (error.code) {
+        case 'auth/invalid-email':
+          return 'Please enter a valid email address.';
+        case 'auth/user-disabled':
+          return 'This account has been disabled.';
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+          return 'Invalid email or password.';
+        case 'auth/email-already-in-use':
+          return 'This email is already in use.';
+        case 'auth/weak-password':
+          return 'Password should be at least 6 characters.';
+        case 'auth/network-request-failed':
+          return 'Network error. Check your connection and try again.';
+        case 'auth/too-many-requests':
+          return 'Too many attempts. Please wait a bit and try again.';
+        default:
+          return 'Authentication failed. Please try again.';
+      }
+    },
+    [loginEmail, signupEmail, verificationEmail]
+  );
+
+  const silentlyCheckVerification = useCallback(async () => {
+    if (!isVerificationStep) {
+      return;
     }
 
-    return Math.max(0, Math.ceil((otpResendAvailableAt - otpClock) / 1000));
-  }, [otpClock, otpResendAvailableAt]);
+    const verified = await checkEmailVerification();
 
-  const expiresInSeconds = useMemo(() => {
-    if (!otpExpiresAt) {
-      return 0;
+    if (verified) {
+      router.replace('/homepage');
+    }
+  }, [checkEmailVerification, isVerificationStep, router]);
+
+  const extractVerificationCode = useCallback((incomingUrl: string): string | null => {
+    const parseForCode = (url: string): string | null => {
+      const parsed = Linking.parse(url);
+      const params = parsed.queryParams ?? {};
+
+      if (params.mode === 'verifyEmail' && typeof params.oobCode === 'string') {
+        return params.oobCode;
+      }
+
+      return null;
+    };
+
+    const directCode = parseForCode(incomingUrl);
+    if (directCode) {
+      return directCode;
     }
 
-    return Math.max(0, Math.ceil((otpExpiresAt - otpClock) / 1000));
-  }, [otpClock, otpExpiresAt]);
+    const parsed = Linking.parse(incomingUrl);
+    const params = parsed.queryParams ?? {};
+    const nestedLink = typeof params.link === 'string' ? params.link : null;
+    const deepLinkId = typeof params.deep_link_id === 'string' ? params.deep_link_id : null;
 
-  const formatCountdown = useCallback((totalSeconds: number) => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = Math.max(0, totalSeconds % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    if (nestedLink) {
+      const nestedCode = parseForCode(nestedLink);
+      if (nestedCode) {
+        return nestedCode;
+      }
+    }
+
+    if (deepLinkId) {
+      const deepLinkCode = parseForCode(deepLinkId);
+      if (deepLinkCode) {
+        return deepLinkCode;
+      }
+    }
+
+    return null;
   }, []);
 
-  const canResendOtp = resendCooldownSeconds <= 0;
-
-  function getAuthErrorMessage(error: unknown): string {
-    if (error instanceof Error && error.message === 'MISSING_EMAIL') {
-      return 'Enter your email address first.';
-    }
-
-    if (error instanceof Error && error.message === 'MISSING_PASSWORD') {
-      return 'Enter your password first.';
-    }
-
-    if (error instanceof Error && error.message === 'INVALID_OTP_FORMAT') {
-      return 'Enter the 6-digit code from your email.';
-    }
-
-    if (error instanceof FirebaseError) {
-      const details = (error as FirebaseError & {
-        details?: {
-          code?: string;
-          attemptsRemaining?: number;
-          resendAvailableAt?: number;
-        };
-      }).details;
-
-      if (details?.code === 'OTP_RESEND_COOLDOWN') {
-        const waitSeconds = details.resendAvailableAt
-          ? Math.max(0, Math.ceil((details.resendAvailableAt - Date.now()) / 1000))
-          : 60;
-        return `Please wait ${formatCountdown(waitSeconds)} before requesting a new code.`;
+  const handleVerificationLink = useCallback(
+    async (incomingUrl: string | null | undefined) => {
+      if (!incomingUrl) {
+        return;
       }
 
-      if (details?.code === 'OTP_EXPIRED') {
-        return 'That code expired. Request a new one.';
+      const oobCode = extractVerificationCode(incomingUrl);
+      if (!oobCode || lastHandledOobCodeRef.current === oobCode) {
+        return;
       }
 
-      if (details?.code === 'OTP_INVALID') {
-        if (typeof details.attemptsRemaining === 'number') {
-          return `Invalid code. ${details.attemptsRemaining} attempt(s) remaining.`;
-        }
-        return 'Invalid code. Please try again.';
+      lastHandledOobCodeRef.current = oobCode;
+
+      try {
+        await applyActionCode(auth, oobCode);
+        await silentlyCheckVerification();
+      } catch (error) {
+        Alert.alert('Verification failed', getAuthErrorMessage(error));
       }
+    },
+    [extractVerificationCode, getAuthErrorMessage, silentlyCheckVerification]
+  );
 
-      if (details?.code === 'OTP_ATTEMPTS_EXHAUSTED') {
-        return 'Too many attempts. Request a new code.';
+  useEffect(() => {
+    void silentlyCheckVerification();
+  }, [silentlyCheckVerification]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void silentlyCheckVerification();
       }
+    });
 
-      if (details?.code === 'OTP_NOT_FOUND') {
-        return 'No active code found. Request a new one.';
-      }
+    return () => subscription.remove();
+  }, [silentlyCheckVerification]);
 
-      if (details?.code === 'EMAIL_PROVIDER_NOT_CONFIGURED') {
-        return 'Email delivery is not configured yet. Please contact support.';
-      }
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      void handleVerificationLink(url);
+    });
 
-      if (details?.code === 'EMAIL_DELIVERY_FAILED') {
-        return 'We could not deliver the code. Please try again.';
-      }
-    }
+    void Linking.getInitialURL().then((initialUrl) => {
+      void handleVerificationLink(initialUrl);
+    });
 
-    if (!(error instanceof FirebaseError)) {
-      return 'Something went wrong. Please try again.';
-    }
-
-    switch (error.code) {
-      case 'auth/invalid-email':
-        return 'Please enter a valid email address.';
-      case 'auth/user-disabled':
-        return 'This account has been disabled.';
-      case 'auth/user-not-found':
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-        return 'Invalid email or password.';
-      case 'auth/email-already-in-use':
-        return 'This email is already in use.';
-      case 'auth/weak-password':
-        return 'Password should be at least 6 characters.';
-      case 'auth/network-request-failed':
-        return 'Network error. Check your connection and try again.';
-      case 'auth/too-many-requests':
-        return 'Too many attempts. Please wait a bit and try again.';
-      case 'functions/unauthenticated':
-        return 'Please sign in again to continue.';
-      case 'functions/unavailable':
-        return 'The verification service is unavailable right now. Try again shortly.';
-      case 'functions/invalid-argument':
-        return 'Please double-check your verification details and try again.';
-      case 'functions/resource-exhausted':
-        return 'Please wait before requesting another code.';
-      case 'functions/not-found':
-        return 'The verification service is not deployed yet. Please try again later.';
-      default:
-        if (error.code?.startsWith('functions/')) {
-          return 'The verification service is unavailable right now. Try again shortly.';
-        }
-        return 'Authentication failed. Please try again.';
-    }
-  }
+    return () => subscription.remove();
+  }, [handleVerificationLink]);
 
   const onLogin = async () => {
     if (isSubmitting) {
@@ -486,12 +503,13 @@ export default function AuthScreen() {
     setIsSubmitting(true);
 
     try {
-      const challenge = await loginUser(loginEmail, loginPassword);
-      setOtpCode('');
-      setOtpExpiresAt(challenge.expiresAt);
-      setOtpResendAvailableAt(challenge.resendAvailableAt);
+      await loginUser(loginEmail, loginPassword);
     } catch (error) {
-      Alert.alert('Sign in failed', getAuthErrorMessage(error));
+      if (error instanceof Error && error.message === 'EMAIL_VERIFICATION_LINK_SENT') {
+        Alert.alert('Verification Required', getAuthErrorMessage(error));
+      } else {
+        Alert.alert('Sign in failed', getAuthErrorMessage(error));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -522,72 +540,48 @@ export default function AuthScreen() {
     }
   };
 
-  const onChangeOtpCode = (value: string) => {
-    const cleaned = value.replace(/[^0-9]/g, '').slice(0, 6);
-    setOtpCode(cleaned);
-  };
-
-  const onResendOtp = async () => {
-    if (isSendingOtp || isVerifyingOtp) {
+  const onResendVerification = async () => {
+    if (isResendingVerification) {
       return;
     }
 
-    if (!otpEmail) {
-      Alert.alert('Missing email', 'Please sign in again to request a code.');
+    if (!user) {
+      Alert.alert('Missing account', 'Please sign in again to resend the verification email.');
       return;
     }
 
-    if (resendCooldownSeconds > 0) {
-      Alert.alert(
-        'Please wait',
-        `You can request a new code in ${formatCountdown(resendCooldownSeconds)}.`
-      );
-      return;
-    }
-
-    setIsSendingOtp(true);
+    setIsResendingVerification(true);
 
     try {
-      const challenge = await resendEmailOtp(
-        otpEmail,
-        mode === 'signup' ? 'signup' : 'login'
-      );
-      setOtpCode('');
-      setOtpExpiresAt(challenge.expiresAt);
-      setOtpResendAvailableAt(challenge.resendAvailableAt);
-      Alert.alert('Code sent', `We sent a new code to ${otpEmail}.`);
+      await sendVerificationEmail();
+      const label = verificationEmail || 'your email';
+      Alert.alert('Verification Email Sent', `We sent a new verification link to ${label}.`);
     } catch (error) {
-      Alert.alert('Unable to send code', getAuthErrorMessage(error));
+      Alert.alert('Unable to resend', getAuthErrorMessage(error));
     } finally {
-      setIsSendingOtp(false);
+      setIsResendingVerification(false);
     }
   };
 
-  const onVerifyOtp = async () => {
-    if (isVerifyingOtp) {
+  const onCheckVerification = async () => {
+    if (isCheckingVerification) {
       return;
     }
 
-    if (!otpEmail) {
-      Alert.alert('Missing email', 'Please sign in again to verify.');
-      return;
-    }
-
-    if (otpCode.length !== 6) {
-      Alert.alert('Invalid code', 'Enter the 6-digit code from your email.');
-      return;
-    }
-
-    setIsVerifyingOtp(true);
+    setIsCheckingVerification(true);
 
     try {
-      await verifyEmailOtp(otpEmail, otpCode);
-      await markOtpVerified();
-      router.replace('/homepage');
+      const verified = await checkEmailVerification();
+
+      if (verified) {
+        router.replace('/homepage');
+      } else {
+        Alert.alert('Not verified yet', 'Please check your email and open the verification link.');
+      }
     } catch (error) {
-      Alert.alert('Verification failed', getAuthErrorMessage(error));
+      Alert.alert('Unable to verify', getAuthErrorMessage(error));
     } finally {
-      setIsVerifyingOtp(false);
+      setIsCheckingVerification(false);
     }
   };
 
@@ -609,13 +603,10 @@ export default function AuthScreen() {
     setIsSubmitting(true);
 
     try {
-      const challenge = await registerUser(fullName, signupEmail, signupPassword);
-      setOtpCode('');
-      setOtpExpiresAt(challenge.expiresAt);
-      setOtpResendAvailableAt(challenge.resendAvailableAt);
+      await registerUser(fullName, signupEmail, signupPassword);
       Alert.alert(
-        'Verification Code Sent',
-        `We sent a 6-digit code to ${signupEmail.trim()}. Enter it to finish creating your account.`
+        'Verification Email Sent',
+        `We sent a verification link to ${signupEmail.trim()}. Open it to finish creating your account.`
       );
     } catch (error) {
       Alert.alert('Sign up failed', getAuthErrorMessage(error));
@@ -715,7 +706,11 @@ export default function AuthScreen() {
               />
             </View>
             <Text style={[styles.title, responsiveStyles.title]}>
-              {isOtpStep ? 'Verify Your Email' : mode === 'login' ? 'Welcome Back' : 'Create Account'}
+              {isVerificationStep
+                ? 'Verify Your Email'
+                : mode === 'login'
+                ? 'Welcome Back'
+                : 'Create Account'}
             </Text>
             <Text style={[styles.subtitle, responsiveStyles.subtitle]}>{subtitle}</Text>
           </Animated.View>
@@ -730,7 +725,7 @@ export default function AuthScreen() {
               },
             ]}
           >
-            {!isOtpStep ? (
+            {!isVerificationStep ? (
               <View style={[styles.switchOuter, responsiveStyles.switchOuter]} onLayout={onSwitchOuterLayout}>
                 <Animated.View
                   style={[
@@ -766,39 +761,25 @@ export default function AuthScreen() {
               </View>
             ) : null}
 
-            {isOtpStep ? (
+            {isVerificationStep ? (
               <View style={[styles.formWrap, responsiveStyles.formWrap]}>
-                <InputField
-                  icon="keypad-outline"
-                  placeholder="6-digit code"
-                  value={otpCode}
-                  onChangeText={onChangeOtpCode}
-                  keyboardType="numeric"
-                  autoCapitalize="none"
-                  textContentType="oneTimeCode"
-                  maxLength={6}
-                  {...inputFieldResponsiveProps}
-                />
-
                 <Text style={[styles.otpMetaText, responsiveStyles.otpMetaText]}>
-                  {expiresInSeconds > 0
-                    ? `Code expires in ${formatCountdown(expiresInSeconds)}`
-                    : 'Code expired. Request a new one.'}
+                  Open the verification link in your email. Once verified, tap continue below.
                 </Text>
 
                 <Pressable
                   style={[
                     styles.primaryButton,
                     responsiveStyles.primaryButton,
-                    isVerifyingOtp && styles.primaryButtonDisabled,
+                    isCheckingVerification && styles.primaryButtonDisabled,
                   ]}
-                  onPress={onVerifyOtp}
-                  disabled={isVerifyingOtp}
+                  onPress={onCheckVerification}
+                  disabled={isCheckingVerification}
                 >
                   <Text style={[styles.primaryButtonText, responsiveStyles.primaryButtonText]}>
-                    {isVerifyingOtp ? 'Verifying...' : 'Verify Code'}
+                    {isCheckingVerification ? 'Checking...' : 'I Verified My Email'}
                   </Text>
-                  {isVerifyingOtp ? (
+                  {isCheckingVerification ? (
                     <ActivityIndicator size="small" color="#0B1220" />
                   ) : (
                     <Ionicons name="arrow-forward" size={18} color="#0B1220" />
@@ -808,19 +789,15 @@ export default function AuthScreen() {
                 <Pressable
                   style={[
                     styles.secondaryButton,
-                    (!canResendOtp || isSendingOtp) && styles.secondaryButtonDisabled,
+                    isResendingVerification && styles.secondaryButtonDisabled,
                   ]}
-                  onPress={onResendOtp}
-                  disabled={!canResendOtp || isSendingOtp}
+                  onPress={onResendVerification}
+                  disabled={isResendingVerification}
                 >
                   <Text style={styles.secondaryButtonText}>
-                    {isSendingOtp
-                      ? 'Sending code...'
-                      : canResendOtp
-                      ? otpExpiresAt
-                        ? 'Resend code'
-                        : 'Send code'
-                      : `Resend in ${formatCountdown(resendCooldownSeconds)}`}
+                    {isResendingVerification
+                      ? 'Sending verification email...'
+                      : 'Resend verification email'}
                   </Text>
                 </Pressable>
               </View>
@@ -942,7 +919,7 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {!isOtpStep ? (
+            {!isVerificationStep ? (
               <View style={[styles.dividerRow, responsiveStyles.dividerRow]}>
                 <View style={styles.divider} />
                 <Text style={[styles.dividerText, responsiveStyles.dividerText]}>or continue with</Text>
@@ -950,7 +927,7 @@ export default function AuthScreen() {
               </View>
             ) : null}
 
-            {!isOtpStep ? (
+            {!isVerificationStep ? (
               <View style={[styles.socialRow, responsiveStyles.socialRow]}>
                 <SocialButton
                   icon="logo-google"
@@ -967,7 +944,7 @@ export default function AuthScreen() {
               </View>
             ) : null}
 
-            {!isOtpStep ? (
+            {!isVerificationStep ? (
               <View style={[styles.bottomRow, responsiveStyles.bottomRow]}>
                 <Text style={[styles.bottomText, responsiveStyles.bottomText]}>
                   {mode === 'login'

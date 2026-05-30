@@ -15,7 +15,7 @@ import { useAuth } from '../../authprovider';
 
 export default function TabTwoScreen() {
   const router = useRouter();
-  const { user, initializing, isOtpVerified } = useAuth();
+  const { user, initializing, isEmailVerified } = useAuth();
   const { width } = useWindowDimensions();
   const { isTablet } = getDeviceFlags(width);
   const headerIconSize = clamp(width * 0.66, 220, isTablet ? 420 : 340);
@@ -27,12 +27,12 @@ export default function TabTwoScreen() {
   const logoSize = clamp(width * 0.24, 88, 150);
 
   useEffect(() => {
-    if (!initializing && (!user || !isOtpVerified)) {
+    if (!initializing && (!user || !isEmailVerified)) {
       router.replace('/');
     }
-  }, [initializing, isOtpVerified, router, user]);
+  }, [initializing, isEmailVerified, router, user]);
 
-  if (initializing || !user || !isOtpVerified) {
+  if (initializing || !user || !isEmailVerified) {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ThemedText>Checking your session...</ThemedText>
