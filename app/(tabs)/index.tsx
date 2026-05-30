@@ -124,7 +124,7 @@ export default function AuthScreen() {
 
   useEffect(() => {
     if (!initializing && user && isEmailVerified) {
-      router.replace('/homepage');
+      router.replace('/userhome');
     }
   }, [initializing, isEmailVerified, router, user]);
 
@@ -398,7 +398,7 @@ export default function AuthScreen() {
     const verified = await checkEmailVerification();
 
     if (verified) {
-      router.replace('/homepage');
+      router.replace('/userhome');
     }
   }, [checkEmailVerification, isVerificationStep, router]);
 
@@ -574,7 +574,7 @@ export default function AuthScreen() {
       const verified = await checkEmailVerification();
 
       if (verified) {
-        router.replace('/homepage');
+        router.replace('/userhome');
       } else {
         Alert.alert('Not verified yet', 'Please check your email and open the verification link.');
       }

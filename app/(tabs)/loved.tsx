@@ -33,7 +33,7 @@ export default function LovedScreen() {
 
 	const handleBottomNavPress = useCallback((key: string) => {
 		if (key === "home") {
-			router.replace("/homepage");
+			router.replace("/userhome");
 			return;
 		}
 
@@ -125,7 +125,7 @@ export default function LovedScreen() {
 					</Text>
 					<TouchableOpacity
 						style={styles.exploreButton}
-						onPress={() => router.replace("/homepage")}
+						onPress={() => router.replace("/userhome")}
 						activeOpacity={0.85}
 					>
 						<Text style={styles.exploreButtonText}>Explore places</Text>

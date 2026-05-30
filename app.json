@@ -7,6 +7,7 @@
     "icon": "./assets/images/RoomRadarHomeIcon.png",
     "scheme": "roomradarappmobile",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#05071A",
     "newArchEnabled": true,
     "ios": {
       "icon": "./assets/images/RoomRadarHomeIcon.png",
@@ -51,15 +52,16 @@
     },
     "plugins": [
       "expo-router",
+      "expo-system-ui",
       [
         "expo-splash-screen",
         {
           "image": "./assets/images/RoomRadarHomeIcon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#05071A",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#05071A"
           }
         }
       ]

@@ -104,7 +104,7 @@ export default function HomeScreen() {
 		}
 
 		if (key === "home") {
-			router.replace("/homepage");
+			router.replace("/userhome");
 		}
 	}, [router]);
 
@@ -178,7 +178,7 @@ export default function HomeScreen() {
 
 	return (
 		<SafeAreaView style={styles.safeArea}>
-			<StatusBar barStyle="dark-content" backgroundColor="#05071A" />
+			<StatusBar barStyle="light-content" backgroundColor="#05071A" />
 
 			<FlatList
 				style={styles.scrollView}

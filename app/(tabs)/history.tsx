@@ -16,7 +16,7 @@ export default function HistoryScreen() {
 
 	const handleBottomNavPress = (key: string) => {
 		if (key === "home") {
-			router.replace("/homepage");
+			router.replace("/userhome");
 			return;
 		}
 
