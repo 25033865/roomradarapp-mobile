@@ -124,7 +124,21 @@ export default function HomeScreen() {
 	const renderPlaceCard = useCallback(({ item }: { item: Place }) => {
 		const isFav = isFavorite(item.id);
 		return (
-			<TouchableOpacity style={styles.card} activeOpacity={0.92}>
+			<TouchableOpacity
+				style={styles.card}
+				activeOpacity={0.92}
+				onPress={() =>
+					router.push({
+						pathname: "/place-details",
+						params: {
+							name: item.name,
+							location: item.location,
+							rating: item.rating,
+							image: item.image,
+						},
+					})
+				}
+			>
 				<View style={styles.cardImageWrap}>
 					<Image source={{ uri: item.image }} style={styles.cardImage} />
 
@@ -158,7 +172,7 @@ export default function HomeScreen() {
 				</View>
 			</TouchableOpacity>
 		);
-	}, [isFavorite, toggleFavorite]);
+	}, [isFavorite, router, toggleFavorite]);
 
 	const keyExtractor = useCallback((item: Place) => item.id, []);
 
