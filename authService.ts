@@ -9,6 +9,7 @@ import {
     User,
 } from 'firebase/auth';
 import { auth } from './firebaseConfig';
+import { endCurrentSecuritySession } from './securityService';
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -74,6 +75,7 @@ export const loginUser = async (
 };
 
 export const logoutUser = async (): Promise<void> => {
+    await endCurrentSecuritySession(auth.currentUser);
     await signOut(auth);
 };
 

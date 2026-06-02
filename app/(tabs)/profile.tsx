@@ -5,19 +5,19 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { updateProfile } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-	ActivityIndicator,
-	Alert,
-	Image,
-	KeyboardAvoidingView,
-	Platform,
-	SafeAreaView,
-	ScrollView,
-	StatusBar,
-	StyleSheet,
-	Text,
-	TextInput,
-	TouchableOpacity,
-	View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useAuth } from "../../authprovider";
 import { logoutUser } from "../../authService";
@@ -28,7 +28,7 @@ const APP_BACKGROUND = "#05071A";
 const PRIMARY_TEXT = "#FAFAFE";
 const SECONDARY_TEXT = "#B9B9BE";
 const MUTED_TEXT = "#A9ABC3";
-const EDIT_GREEN = "#15936D";
+const EDIT_GREEN = "#EAF2FF";
 
 type ProfileExtras = {
 	phoneNumber: string;
@@ -190,6 +190,12 @@ export default function ProfileScreen() {
 
 	const handleEditProfilePress = useCallback(() => {
 		router.push("/profile?mode=edit");
+	}, [router]);
+
+	const handleMenuItemPress = useCallback((label: string) => {
+		if (label === "Password & Security") {
+			router.push("/password-security");
+		}
 	}, [router]);
 
 	const handleCloseEdit = useCallback(() => {
@@ -378,7 +384,7 @@ export default function ProfileScreen() {
 									<Ionicons
 										name={isPhoneVerified ? "checkmark" : "shield-checkmark-outline"}
 										size={16}
-										color={isPhoneVerified ? "#05140F" : EDIT_GREEN}
+										color={isPhoneVerified ? "#0B1220" : EDIT_GREEN}
 									/>
 									<Text
 										style={[
@@ -426,7 +432,7 @@ export default function ProfileScreen() {
 											<Ionicons
 												name={isSelected ? "radio-button-on" : "radio-button-off"}
 												size={18}
-												color={isSelected ? "#05140F" : EDIT_GREEN}
+												color={isSelected ? "#0B1220" : EDIT_GREEN}
 											/>
 											<Text
 												style={[
@@ -452,7 +458,7 @@ export default function ProfileScreen() {
 								{isSaving ? "Saving..." : "Save changes"}
 							</Text>
 							{isSaving ? (
-								<ActivityIndicator size="small" color="#05140F" />
+									<ActivityIndicator size="small" color="#0B1220" />
 							) : null}
 						</TouchableOpacity>
 					</ScrollView>
@@ -493,7 +499,10 @@ export default function ProfileScreen() {
 						<TouchableOpacity
 							key={item.label}
 							style={styles.menuItem}
+							onPress={() => handleMenuItemPress(item.label)}
 							activeOpacity={0.65}
+							accessibilityRole="button"
+							accessibilityLabel={item.label}
 						>
 							<View style={styles.menuLeft}>
 								<Ionicons name={item.icon} size={20} color={SECONDARY_TEXT} />
@@ -650,7 +659,7 @@ const styles = StyleSheet.create({
 		color: EDIT_GREEN,
 	},
 	verifyButtonTextDone: {
-		color: "#05140F",
+		color: "#0B1220",
 	},
 	genderRow: {
 		flexDirection: "row",
@@ -677,7 +686,7 @@ const styles = StyleSheet.create({
 		color: EDIT_GREEN,
 	},
 	genderOptionTextSelected: {
-		color: "#05140F",
+		color: "#0B1220",
 	},
 	saveButton: {
 		minHeight: 54,
@@ -695,7 +704,7 @@ const styles = StyleSheet.create({
 	saveButtonText: {
 		fontSize: 15,
 		fontWeight: "800",
-		color: "#05140F",
+		color: "#0B1220",
 	},
 	content: {
 		paddingHorizontal: 18,

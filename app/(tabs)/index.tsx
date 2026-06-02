@@ -36,6 +36,7 @@ import {
     requestPasswordReset,
 } from '../../authService';
 import { auth } from '../../firebaseConfig';
+import { validatePassword } from '../../securityService';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -189,6 +190,10 @@ export default function AuthScreen() {
     const logoSize = clamp(width * 0.46, 140, isTablet ? 260 : 210);
     const titleSize = clamp(width * 0.088, 28, isTablet ? 44 : 36);
     const subtitleSize = clamp(width * 0.042, 14, 18);
+    const socialBadgeSize = clamp(baseSize * 0.085, 34, 48);
+    const socialIconSize = clamp(width * 0.055, 18, 24);
+    const socialGap = clamp(baseSize * 0.02, 10, 16);
+    const socialHitSlop = clamp(baseSize * 0.012, 6, 10);
     const logoHorizontalAlign: 'center' | 'flex-start' = isTablet ? 'center' : 'flex-start';
     const textAlign: 'center' | 'left' = isTablet ? 'center' : 'left';
     const rowDirection: 'column' | 'row' = isSmallPhone ? 'column' : 'row';
@@ -310,16 +315,21 @@ export default function AuthScreen() {
         fontSize: clamp(width * 0.033, 11, 13),
       },
       socialRow: {
-        flexDirection: rowDirection,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: socialGap,
         marginBottom: clamp(baseSize * 0.03, 16, 24),
       },
       socialButton: {
-        minHeight: clamp(baseSize * 0.08, 48, 58),
-        borderRadius: clamp(baseSize * 0.028, 14, 18),
+        padding: clamp(baseSize * 0.012, 4, 8),
       },
-      socialText: {
-        fontSize: clamp(width * 0.038, 13, 15),
+      socialIconBadge: {
+        width: socialBadgeSize,
+        height: socialBadgeSize,
+        borderRadius: socialBadgeSize / 2,
       },
+      socialIconSize,
+      socialHitSlop,
       bottomRow: {
         flexDirection: rowDirection,
         gap: isSmallPhone ? 4 : 0,
@@ -597,6 +607,20 @@ export default function AuthScreen() {
 
     if (signupPassword !== confirmPassword) {
       Alert.alert('Password mismatch', 'Passwords do not match.');
+      return;
+    }
+
+    const passwordValidation = validatePassword(signupPassword);
+    if (!passwordValidation.isValid) {
+      const unmetRules = passwordValidation.rules
+        .filter((rule) => !rule.met)
+        .map((rule) => `- ${rule.label}`)
+        .join('\n');
+
+      Alert.alert(
+        'Weak password',
+        `Please meet all password requirements:\n${unmetRules}`
+      );
       return;
     }
 
@@ -933,13 +957,25 @@ export default function AuthScreen() {
                   icon="logo-google"
                   label="Google"
                   buttonStyle={responsiveStyles.socialButton}
-                  textStyle={responsiveStyles.socialText}
+                  badgeStyle={responsiveStyles.socialIconBadge}
+                  iconSize={responsiveStyles.socialIconSize}
+                  hitSlop={responsiveStyles.socialHitSlop}
+                />
+                <SocialButton
+                  icon="logo-facebook"
+                  label="Facebook"
+                  buttonStyle={responsiveStyles.socialButton}
+                  badgeStyle={responsiveStyles.socialIconBadge}
+                  iconSize={responsiveStyles.socialIconSize}
+                  hitSlop={responsiveStyles.socialHitSlop}
                 />
                 <SocialButton
                   icon="logo-apple"
                   label="Apple"
                   buttonStyle={responsiveStyles.socialButton}
-                  textStyle={responsiveStyles.socialText}
+                  badgeStyle={responsiveStyles.socialIconBadge}
+                  iconSize={responsiveStyles.socialIconSize}
+                  hitSlop={responsiveStyles.socialHitSlop}
                 />
               </View>
             ) : null}
@@ -1033,14 +1069,29 @@ type SocialButtonProps = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   buttonStyle?: StyleProp<ViewStyle>;
-  textStyle?: StyleProp<TextStyle>;
+  badgeStyle?: StyleProp<ViewStyle>;
+  iconSize?: number;
+  hitSlop?: number;
 };
 
-function SocialButton({ icon, label, buttonStyle, textStyle }: SocialButtonProps) {
+function SocialButton({
+  icon,
+  label,
+  buttonStyle,
+  badgeStyle,
+  iconSize = 18,
+  hitSlop = 8,
+}: SocialButtonProps) {
   return (
-    <Pressable style={[styles.socialButton, buttonStyle]}>
-      <Ionicons name={icon} size={18} color="#EAF2FF" />
-      <Text style={[styles.socialText, textStyle]}>{label}</Text>
+    <Pressable
+      style={[styles.socialButton, buttonStyle]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={hitSlop}
+    >
+      <View style={[styles.socialIconBadge, badgeStyle]}>
+        <Ionicons name={icon} size={iconSize} color="#EAF2FF" />
+      </View>
     </Pressable>
   );
 }
@@ -1280,25 +1331,25 @@ const styles = StyleSheet.create({
   },
   socialRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 12,
     marginBottom: 18,
   },
   socialButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 16,
-    backgroundColor: '#0B1224',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    padding: 4,
   },
-  socialText: {
-    color: '#EAF2FF',
-    fontSize: 14,
-    fontWeight: '700',
+  socialIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F1428',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   bottomRow: {
     flexDirection: 'row',

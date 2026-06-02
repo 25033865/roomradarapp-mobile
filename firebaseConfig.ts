@@ -7,6 +7,7 @@ import {
     type Auth,
     type Persistence,
 } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getFunctions, type Functions } from 'firebase/functions';
 
 const firebaseConfig = {
@@ -21,6 +22,7 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 let auth: Auth;
+let db: Firestore;
 let functions: Functions;
 
 type ReactNativePersistenceFactory = (
@@ -46,6 +48,7 @@ try {
     auth = getAuth(app);
 }
 
+db = getFirestore(app);
 functions = getFunctions(app, functionsRegion);
 
-export { app, auth, functions };
+export { app, auth, db, functions };
