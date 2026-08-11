@@ -49,7 +49,6 @@ const PROFILE_ITEMS: ProfileItem[] = [
 	{ label: "Password & Security", icon: "lock-closed-outline" },
 	{ label: "Notifications", icon: "notifications-outline" },
 	{ label: "Appointments", icon: "calendar-outline" },
-	{ label: "Help Center", icon: "help-circle-outline" },
 	{ label: "Contact Us", icon: "call-outline" },
 	{ label: "About Us", icon: "information-circle-outline" },
 ];
