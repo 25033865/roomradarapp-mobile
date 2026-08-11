@@ -2,20 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-	Animated,
-	FlatList,
-	Image,
-	Modal,
-	NativeScrollEvent,
-	NativeSyntheticEvent,
-	SafeAreaView,
-	ScrollView,
-	StatusBar,
-	StyleSheet,
-	Text,
-	TouchableOpacity,
-	useWindowDimensions,
-	View,
+    Animated,
+    FlatList,
+    Image,
+    Modal,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 
 type Param = string | string[] | undefined;
@@ -100,9 +100,23 @@ export default function PlaceDetailsScreen() {
 		[hotelImages, location, name, rating]
 	);
 
-	const galleryGap = 10;
-	const galleryItemWidth = (width - 36 - galleryGap) / 2;
-	const featuredHeight = Math.min(Math.max(width * 0.64, 230), 340);
+	const collageGap = 4;
+	const collageWidth = width - 36;
+
+	// top: two larger images; bottom: three smaller images
+	const topPreviewImages = hotel.images.slice(0, Math.min(2, hotel.images.length));
+	const bottomPreviewImages = hotel.images.slice(2, Math.min(5, hotel.images.length));
+	const remainingPhotoCount = Math.max(hotel.images.length - 5, 0);
+	const topTileWidth =
+		topPreviewImages.length === 1 ? collageWidth : (collageWidth - collageGap) / 2;
+	const bottomTileWidth =
+		bottomPreviewImages.length <= 1
+			? collageWidth
+			: bottomPreviewImages.length === 2
+				? (collageWidth - collageGap) / 2
+				: (collageWidth - collageGap * 2) / 3;
+	const topTileHeight = Math.min(Math.max(topTileWidth * 0.66, 126), 210);
+	const bottomTileHeight = Math.min(Math.max(bottomTileWidth * 0.96, 104), 170);
 
 	const openImageViewer = useCallback(
 		(index: number) => {
@@ -203,61 +217,104 @@ export default function PlaceDetailsScreen() {
 				</TouchableOpacity>
 
 				<View style={styles.photosSection}>
-					<View style={styles.sectionHeader}>
-						<View>
-							<Text style={styles.sectionTitle}>Hotel Photos</Text>
-							<Text style={styles.sectionSubtitle}>
-								{hotel.images.length} photos from this stay
-							</Text>
+					<View style={styles.hotelHeroHeader}>
+						<View style={styles.hotelTitleWrap}>
+							<Text style={styles.hotelTitle}>{hotel.name}</Text>
+							<View style={styles.hotelClassRow}>
+								{[0, 1, 2].map((item) => (
+									<View key={item} style={styles.hotelClassIcon}>
+										<View style={styles.hotelClassDot} />
+									</View>
+								))}
+							</View>
 						</View>
-						<View style={styles.photoCountBadge}>
-							<Ionicons name="images-outline" size={15} color={ACCENT} />
-							<Text style={styles.photoCountText}>{hotel.images.length}</Text>
+						<View style={styles.scoreBadge}>
+							<Text style={styles.scoreText}>{hotel.rating.replace(".", ",")}</Text>
 						</View>
 					</View>
 
-					<TouchableOpacity
-						style={styles.featuredImageButton}
-						onPress={() => openImageViewer(0)}
-						activeOpacity={0.9}
-						accessibilityRole="imagebutton"
-						accessibilityLabel="Open featured hotel photo"
-					>
-						<Image
-							source={{ uri: hotel.images[0] }}
-							style={[styles.featuredImage, { height: featuredHeight }]}
-							resizeMode="cover"
-						/>
-						<View style={styles.featuredOverlay}>
-							<View style={styles.featuredPill}>
-								<Ionicons name="expand-outline" size={14} color={PRIMARY_TEXT} />
-								<Text style={styles.featuredPillText}>View photos</Text>
-							</View>
-						</View>
-					</TouchableOpacity>
+					<Text style={styles.hotelAddress}>{hotel.location}</Text>
 
-					<View style={[styles.galleryGrid, { gap: galleryGap }]}>
-						{hotel.images.map((hotelImage, index) => (
+					<View style={styles.collage}>
+						<View style={styles.collageRow}>
+							{topPreviewImages.map((hotelImage, index) => {
+								<TouchableOpacity
+									key={`${hotelImage}-${index}`}
+									style={[
+										styles.collageTile,
+										styles.collageTopTile,
+										{ 
+											width: topTileWidth,
+											height: topTileHeight,
+											marginRight: topPreviewImages.length > 1 && index === 0 ? collageGap : 0,
+										}
+									]}
+									onPress={() => openImageViewer(index)}
+									activeOpacity={0.88}
+									accessibilityRole="imagebutton"
+									accessibilityLabel={`Open hotel photo ${index + 1}`}
+								>
+									<Image
+										source={{ uri: hotelImage }}
+										style={[styles.galleryImage]}
+										resizeMode="cover"
+									/>
+								</TouchableOpacity>
+							))}
+						</View>
+
+						<View style={[styles.collageRow, { marginTop: collageGap }]}>
+							{bottomPreviewImages.map((hotelImage, itemIndex) => {
+								const imageIndex = itemIndex + 2;
+								const showRemainingOverlay =
+									itemIndex === bottomPreviewImages.length - 1 &&
+									remainingPhotoCount > 0;
+
+								return (
+									<TouchableOpacity
+										key={`${hotelImage}-${imageIndex}`}
+										style={[
+											styles.collageTile,
+											{
+												width: bottomTileWidth,
+												height: bottomTileHeight,
+												marginRight: itemIndex < bottomPreviewImages.length - 1 ? collageGap : 0,
+											},
+										]}
+										onPress={() => openImageViewer(imageIndex)}
+										activeOpacity={0.88}
+										accessibilityRole="imagebutton"
+										accessibilityLabel={`Open hotel photo ${imageIndex + 1}`}
+									>
+										<Image
+											source={{ uri: hotelImage }}
+											style={styles.galleryImage}
+											resizeMode="cover"
+										/>
+										{showRemainingOverlay ? (
+											<View style={styles.remainingOverlay}>
+												<Text style={styles.remainingText}>+{remainingPhotoCount}</Text>
+											</View>
+										) : null}
+									</TouchableOpacity>
+								);
+							})}
+						</View>
+
+						{hotel.images.length > 0 ? (
 							<TouchableOpacity
-								key={`${hotelImage}-${index}`}
-								style={[
-									styles.galleryItem,
-									{
-										width: galleryItemWidth,
-									},
-								]}
-								onPress={() => openImageViewer(index)}
-								activeOpacity={0.88}
-								accessibilityRole="imagebutton"
-								accessibilityLabel={`Open hotel photo ${index + 1}`}
+								style={styles.viewAllPhotosButton}
+								onPress={() => openImageViewer(0)}
+								activeOpacity={0.82}
+								accessibilityRole="button"
+								accessibilityLabel="View all hotel photos"
 							>
-								<Image
-									source={{ uri: hotelImage }}
-									style={styles.galleryImage}
-									resizeMode="cover"
-								/>
+								<Ionicons name="images-outline" size={15} color={PRIMARY_TEXT} />
+								<Text style={styles.viewAllPhotosText}>
+									View all {hotel.images.length} photos
+								</Text>
 							</TouchableOpacity>
-						))}
+						) : null}
 					</View>
 				</View>
 
@@ -447,6 +504,107 @@ const styles = StyleSheet.create({
 	galleryImage: {
 		width: "100%",
 		height: "100%",
+	},
+	collage: {
+		marginTop: 10,
+	},
+	collageRow: {
+		flexDirection: "row",
+		alignItems: "stretch",
+	},
+	collageTile: {
+		borderRadius: 18,
+		overflow: "hidden",
+		backgroundColor: PANEL_ALT,
+	},
+	collageTopTile: {
+		// slightly larger visual treatment for top tiles
+	},
+	remainingOverlay: {
+		...StyleSheet.absoluteFillObject,
+		backgroundColor: "rgba(0,0,0,0.44)",
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	remainingText: {
+		color: PRIMARY_TEXT,
+		fontSize: 20,
+		fontWeight: "800",
+	},
+	viewAllPhotosButton: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 8,
+		marginTop: 12,
+		alignSelf: "flex-start",
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderRadius: 14,
+		backgroundColor: "rgba(255,255,255,0.04)",
+		borderWidth: 1,
+		borderColor: BORDER,
+	},
+	viewAllPhotosText: {
+		color: PRIMARY_TEXT,
+		fontSize: 13,
+		fontWeight: "800",
+		marginLeft: 6,
+	},
+	hotelHeroHeader: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		marginBottom: 8,
+	},
+	hotelTitleWrap: {
+		flex: 1,
+		marginRight: 12,
+	},
+	hotelTitle: {
+		color: PRIMARY_TEXT,
+		fontSize: 18,
+		fontWeight: "900",
+	},
+	hotelClassRow: {
+		flexDirection: "row",
+		alignItems: "center",
+		marginTop: 6,
+		gap: 8,
+	},
+	hotelClassIcon: {
+		width: 12,
+		height: 12,
+		borderRadius: 6,
+		backgroundColor: "rgba(255,255,255,0.04)",
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	hotelClassDot: {
+		width: 6,
+		height: 6,
+		borderRadius: 3,
+		backgroundColor: ACCENT,
+	},
+	scoreBadge: {
+		paddingHorizontal: 10,
+		paddingVertical: 6,
+		borderRadius: 12,
+		backgroundColor: "rgba(255,255,255,0.04)",
+		borderWidth: 1,
+		borderColor: BORDER,
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	scoreText: {
+		color: PRIMARY_TEXT,
+		fontWeight: "800",
+		fontSize: 13,
+	},
+	hotelAddress: {
+		color: MUTED_TEXT,
+		fontSize: 13,
+		marginTop: 6,
+		marginBottom: 10,
 	},
 	infoCard: {
 		backgroundColor: PANEL,
