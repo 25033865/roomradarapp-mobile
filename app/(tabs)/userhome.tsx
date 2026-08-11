@@ -22,6 +22,18 @@ const { width } = Dimensions.get("window");
 
 const CATEGORIES = ["Most Viewed", "Nearby", "Latest"];
 
+const HOTEL_PHOTO_PLACEHOLDERS = [
+	"https://images.unsplash.com/photo-1566073771259-6a8506099945?w=900&q=80",
+	"https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=900&q=80",
+	"https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=900&q=80",
+	"https://images.unsplash.com/photo-1590490360182-c33d57733427?w=900&q=80",
+	"https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=900&q=80",
+	"https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=900&q=80",
+	"https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=900&q=80",
+	"https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=900&q=80",
+	"https://images.unsplash.com/photo-1540518614846-7eded433c457?w=900&q=80",
+];
+
 const PLACES = [
 	{
 		id: "1",
@@ -30,6 +42,10 @@ const PLACES = [
 		rating: "4.2",
 		image:
 			"https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=600&q=80",
+		images: [
+			"https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=900&q=80",
+			...HOTEL_PHOTO_PLACEHOLDERS,
+		],
 	},
 	{
 		id: "2",
@@ -38,6 +54,10 @@ const PLACES = [
 		rating: "4.9",
 		image:
 			"https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600&q=80",
+		images: [
+			"https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=900&q=80",
+			...HOTEL_PHOTO_PLACEHOLDERS,
+		],
 	},
 	{
 		id: "3",
@@ -46,6 +66,10 @@ const PLACES = [
 		rating: "4.7",
 		image:
 			"https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?w=600&q=80",
+		images: [
+			"https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?w=900&q=80",
+			...HOTEL_PHOTO_PLACEHOLDERS,
+		],
 	},
 	{
 		id: "4",
@@ -54,6 +78,10 @@ const PLACES = [
 		rating: "4.6",
 		image:
 			"https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&q=80",
+		images: [
+			"https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900&q=80",
+			...HOTEL_PHOTO_PLACEHOLDERS,
+		],
 	},
 ];
 
@@ -83,6 +111,9 @@ export default function HomeScreen() {
 	useEffect(() => {
 		PLACES.forEach((place) => {
 			Image.prefetch(place.image);
+			place.images.forEach((hotelImage) => {
+				Image.prefetch(hotelImage);
+			});
 		});
 		Image.prefetch(AVATAR_URL);
 	}, []);
@@ -135,6 +166,7 @@ export default function HomeScreen() {
 							location: item.location,
 							rating: item.rating,
 							image: item.image,
+							images: JSON.stringify(item.images ?? [item.image]),
 						},
 					})
 				}

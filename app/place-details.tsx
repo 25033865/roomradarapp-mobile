@@ -1,18 +1,46 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+	Animated,
+	FlatList,
+	Image,
+	Modal,
+	NativeScrollEvent,
+	NativeSyntheticEvent,
+	SafeAreaView,
+	ScrollView,
+	StatusBar,
+	StyleSheet,
+	Text,
+	TouchableOpacity,
+	useWindowDimensions,
+	View,
 } from "react-native";
 
 type Param = string | string[] | undefined;
+
+const APP_BACKGROUND = "#05071A";
+const PANEL = "#101427";
+const PANEL_ALT = "#0B1022";
+const PRIMARY_TEXT = "#FAFAFE";
+const SECONDARY_TEXT = "#B9B9BE";
+const MUTED_TEXT = "#8F95AA";
+const BORDER = "rgba(255,255,255,0.10)";
+const ACCENT = "#EAF2FF";
+
+const PLACEHOLDER_HOTEL_IMAGES = [
+	"https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80",
+	"https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=1200&q=80",
+	"https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=1200&q=80",
+	"https://images.unsplash.com/photo-1590490360182-c33d57733427?w=1200&q=80",
+	"https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=1200&q=80",
+	"https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=1200&q=80",
+	"https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=1200&q=80",
+	"https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&q=80",
+	"https://images.unsplash.com/photo-1540518614846-7eded433c457?w=1200&q=80",
+	"https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=1200&q=80",
+];
 
 function getParam(value: Param, fallback = ""): string {
 	if (Array.isArray(value)) {
@@ -21,48 +49,292 @@ function getParam(value: Param, fallback = ""): string {
 	return value ?? fallback;
 }
 
+function parseHotelImages(imagesParam: string, fallbackImage: string): string[] {
+	let parsedImages: string[] = [];
+
+	if (imagesParam) {
+		try {
+			const parsed = JSON.parse(imagesParam) as unknown;
+			if (Array.isArray(parsed)) {
+				parsedImages = parsed.filter((item): item is string => typeof item === "string");
+			}
+		} catch {
+			parsedImages = imagesParam.split(",");
+		}
+	}
+
+	const images = [fallbackImage, ...parsedImages]
+		.map((item) => item.trim())
+		.filter(Boolean);
+	const uniqueImages = Array.from(new Set(images));
+
+	return uniqueImages.length > 0 ? uniqueImages : PLACEHOLDER_HOTEL_IMAGES;
+}
+
 export default function PlaceDetailsScreen() {
 	const router = useRouter();
 	const params = useLocalSearchParams();
+	const { width, height } = useWindowDimensions();
+	const viewerOpacity = useRef(new Animated.Value(0)).current;
+	const viewerScale = useRef(new Animated.Value(0.94)).current;
+	const viewerListRef = useRef<FlatList<string>>(null);
+	const [isViewerVisible, setIsViewerVisible] = useState(false);
+	const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
 	const name = getParam(params.name, "Place");
 	const location = getParam(params.location, "Location unavailable");
 	const rating = getParam(params.rating, "N/A");
 	const image = getParam(params.image);
+	const imagesParam = getParam(params.images);
+	const hotelImages = useMemo(
+		() => parseHotelImages(imagesParam, image),
+		[image, imagesParam]
+	);
+	const hotel = useMemo(
+		() => ({
+			name,
+			location,
+			rating,
+			images: hotelImages,
+		}),
+		[hotelImages, location, name, rating]
+	);
+
+	const galleryGap = 10;
+	const galleryItemWidth = (width - 36 - galleryGap) / 2;
+	const featuredHeight = Math.min(Math.max(width * 0.64, 230), 340);
+
+	const openImageViewer = useCallback(
+		(index: number) => {
+			setSelectedImageIndex(index);
+			setIsViewerVisible(true);
+			viewerOpacity.setValue(0);
+			viewerScale.setValue(0.94);
+
+			requestAnimationFrame(() => {
+				viewerListRef.current?.scrollToIndex({
+					index,
+					animated: false,
+				});
+
+				Animated.parallel([
+					Animated.timing(viewerOpacity, {
+						toValue: 1,
+						duration: 220,
+						useNativeDriver: true,
+					}),
+					Animated.spring(viewerScale, {
+						toValue: 1,
+						damping: 18,
+						stiffness: 190,
+						mass: 0.85,
+						useNativeDriver: true,
+					}),
+				]).start();
+			});
+		},
+		[viewerOpacity, viewerScale]
+	);
+
+	const closeImageViewer = useCallback(() => {
+		Animated.parallel([
+			Animated.timing(viewerOpacity, {
+				toValue: 0,
+				duration: 180,
+				useNativeDriver: true,
+			}),
+			Animated.timing(viewerScale, {
+				toValue: 0.96,
+				duration: 180,
+				useNativeDriver: true,
+			}),
+		]).start(({ finished }) => {
+			if (finished) {
+				setIsViewerVisible(false);
+			}
+		});
+	}, [viewerOpacity, viewerScale]);
+
+	const handleViewerScrollEnd = useCallback(
+		(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+			const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+			setSelectedImageIndex(nextIndex);
+		},
+		[width]
+	);
+
+	const renderViewerImage = useCallback(
+		({ item }: { item: string }) => (
+			<View style={[styles.viewerSlide, { width }]}>
+				<Animated.Image
+					source={{ uri: item }}
+					style={[
+						styles.viewerImage,
+						{
+							height: height * 0.78,
+							transform: [{ scale: viewerScale }],
+						},
+					]}
+					resizeMode="contain"
+				/>
+			</View>
+		),
+		[height, viewerScale, width]
+	);
 
 	return (
 		<SafeAreaView style={styles.safeArea}>
-			<StatusBar barStyle="light-content" backgroundColor="#05071A" />
-			<ScrollView contentContainerStyle={styles.content}>
+			<StatusBar barStyle="light-content" backgroundColor={APP_BACKGROUND} />
+			<ScrollView
+				contentContainerStyle={styles.content}
+				showsVerticalScrollIndicator={false}
+				bounces={false}
+				overScrollMode="never"
+			>
 				<TouchableOpacity
 					style={styles.backButton}
 					onPress={() => router.back()}
 					activeOpacity={0.8}
+					accessibilityRole="button"
+					accessibilityLabel="Go back"
 				>
-					<Ionicons name="chevron-back" size={20} color="#fff" />
+					<Ionicons name="chevron-back" size={20} color={PRIMARY_TEXT} />
 					<Text style={styles.backText}>Back</Text>
 				</TouchableOpacity>
 
-				{image ? <Image source={{ uri: image }} style={styles.image} /> : null}
+				<View style={styles.photosSection}>
+					<View style={styles.sectionHeader}>
+						<View>
+							<Text style={styles.sectionTitle}>Hotel Photos</Text>
+							<Text style={styles.sectionSubtitle}>
+								{hotel.images.length} photos from this stay
+							</Text>
+						</View>
+						<View style={styles.photoCountBadge}>
+							<Ionicons name="images-outline" size={15} color={ACCENT} />
+							<Text style={styles.photoCountText}>{hotel.images.length}</Text>
+						</View>
+					</View>
+
+					<TouchableOpacity
+						style={styles.featuredImageButton}
+						onPress={() => openImageViewer(0)}
+						activeOpacity={0.9}
+						accessibilityRole="imagebutton"
+						accessibilityLabel="Open featured hotel photo"
+					>
+						<Image
+							source={{ uri: hotel.images[0] }}
+							style={[styles.featuredImage, { height: featuredHeight }]}
+							resizeMode="cover"
+						/>
+						<View style={styles.featuredOverlay}>
+							<View style={styles.featuredPill}>
+								<Ionicons name="expand-outline" size={14} color={PRIMARY_TEXT} />
+								<Text style={styles.featuredPillText}>View photos</Text>
+							</View>
+						</View>
+					</TouchableOpacity>
+
+					<View style={[styles.galleryGrid, { gap: galleryGap }]}>
+						{hotel.images.map((hotelImage, index) => (
+							<TouchableOpacity
+								key={`${hotelImage}-${index}`}
+								style={[
+									styles.galleryItem,
+									{
+										width: galleryItemWidth,
+									},
+								]}
+								onPress={() => openImageViewer(index)}
+								activeOpacity={0.88}
+								accessibilityRole="imagebutton"
+								accessibilityLabel={`Open hotel photo ${index + 1}`}
+							>
+								<Image
+									source={{ uri: hotelImage }}
+									style={styles.galleryImage}
+									resizeMode="cover"
+								/>
+							</TouchableOpacity>
+						))}
+					</View>
+				</View>
 
 				<View style={styles.infoCard}>
-					<Text style={styles.name}>{name}</Text>
+					<Text style={styles.name}>{hotel.name}</Text>
 					<View style={styles.row}>
 						<Ionicons name="location-sharp" size={16} color="#b0b8d1" />
-						<Text style={styles.location}>{location}</Text>
+						<Text style={styles.location}>{hotel.location}</Text>
 					</View>
 					<View style={styles.ratingRow}>
 						<Ionicons name="star" size={14} color="#FFD700" />
-						<Text style={styles.rating}>{rating}</Text>
+						<Text style={styles.rating}>{hotel.rating}</Text>
 					</View>
 
-					<Text style={styles.sectionTitle}>About this place</Text>
+					<Text style={styles.aboutTitle}>About this place</Text>
 					<Text style={styles.body}>
 						This is your detailed view. You can add more sections here like amenities,
 						pricing, photos, contact information, and booking actions.
 					</Text>
 				</View>
 			</ScrollView>
+
+			<Modal
+				visible={isViewerVisible}
+				transparent
+				statusBarTranslucent
+				animationType="none"
+				onRequestClose={closeImageViewer}
+			>
+				<Animated.View style={[styles.viewerBackdrop, { opacity: viewerOpacity }]}>
+					<SafeAreaView style={styles.viewerSafeArea}>
+						<View style={styles.viewerHeader}>
+							<View style={styles.viewerCounterBadge}>
+								<Text style={styles.viewerCounterText}>
+									{selectedImageIndex + 1} / {hotel.images.length}
+								</Text>
+							</View>
+							<TouchableOpacity
+								style={styles.viewerCloseButton}
+								onPress={closeImageViewer}
+								activeOpacity={0.8}
+								accessibilityRole="button"
+								accessibilityLabel="Close photo viewer"
+							>
+								<Ionicons name="close" size={24} color={PRIMARY_TEXT} />
+							</TouchableOpacity>
+						</View>
+
+						<FlatList
+							ref={viewerListRef}
+							data={hotel.images}
+							renderItem={renderViewerImage}
+							keyExtractor={(item, index) => `${item}-${index}`}
+							horizontal
+							pagingEnabled
+							showsHorizontalScrollIndicator={false}
+							initialScrollIndex={selectedImageIndex}
+							getItemLayout={(_, index) => ({
+								length: width,
+								offset: width * index,
+								index,
+							})}
+							onMomentumScrollEnd={handleViewerScrollEnd}
+							onScrollToIndexFailed={({ index }) => {
+								setTimeout(() => {
+									viewerListRef.current?.scrollToOffset({
+										offset: width * index,
+										animated: false,
+									});
+								}, 0);
+							}}
+							bounces={false}
+							overScrollMode="never"
+						/>
+					</SafeAreaView>
+				</Animated.View>
+			</Modal>
 		</SafeAreaView>
 	);
 }
@@ -70,7 +342,7 @@ export default function PlaceDetailsScreen() {
 const styles = StyleSheet.create({
 	safeArea: {
 		flex: 1,
-		backgroundColor: "#05071A",
+		backgroundColor: APP_BACKGROUND,
 	},
 	content: {
 		padding: 18,
@@ -83,31 +355,108 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		paddingVertical: 8,
 		paddingHorizontal: 10,
-		marginBottom: 10,
+		marginBottom: 16,
 		borderRadius: 10,
 		backgroundColor: "rgba(255,255,255,0.08)",
 	},
 	backText: {
-		color: "#fff",
+		color: PRIMARY_TEXT,
 		fontSize: 14,
 		fontWeight: "600",
 		marginLeft: 4,
 	},
-	image: {
+	photosSection: {
+		marginBottom: 18,
+	},
+	sectionHeader: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		gap: 12,
+		marginBottom: 14,
+	},
+	sectionTitle: {
+		color: PRIMARY_TEXT,
+		fontSize: 21,
+		fontWeight: "900",
+	},
+	sectionSubtitle: {
+		color: MUTED_TEXT,
+		fontSize: 13,
+		fontWeight: "600",
+		marginTop: 3,
+	},
+	photoCountBadge: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 6,
+		borderRadius: 999,
+		borderWidth: 1,
+		borderColor: BORDER,
+		backgroundColor: PANEL,
+		paddingHorizontal: 11,
+		paddingVertical: 7,
+	},
+	photoCountText: {
+		color: ACCENT,
+		fontSize: 12,
+		fontWeight: "900",
+	},
+	featuredImageButton: {
+		borderRadius: 24,
+		overflow: "hidden",
+		backgroundColor: PANEL_ALT,
+		marginBottom: 10,
+	},
+	featuredImage: {
 		width: "100%",
-		height: 280,
+	},
+	featuredOverlay: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
+		alignItems: "flex-end",
+		padding: 14,
+		backgroundColor: "rgba(5,7,26,0.18)",
+	},
+	featuredPill: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 6,
+		borderRadius: 999,
+		backgroundColor: "rgba(5,7,26,0.72)",
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+	},
+	featuredPillText: {
+		color: PRIMARY_TEXT,
+		fontSize: 12,
+		fontWeight: "800",
+	},
+	galleryGrid: {
+		flexDirection: "row",
+		flexWrap: "wrap",
+	},
+	galleryItem: {
+		aspectRatio: 1.06,
 		borderRadius: 18,
-		marginBottom: 16,
+		overflow: "hidden",
+		backgroundColor: PANEL_ALT,
+	},
+	galleryImage: {
+		width: "100%",
+		height: "100%",
 	},
 	infoCard: {
-		backgroundColor: "#101427",
+		backgroundColor: PANEL,
 		borderRadius: 18,
 		padding: 16,
 	},
 	name: {
 		fontSize: 24,
 		fontWeight: "800",
-		color: "#fff",
+		color: PRIMARY_TEXT,
 		marginBottom: 12,
 	},
 	row: {
@@ -135,17 +484,65 @@ const styles = StyleSheet.create({
 		marginLeft: 6,
 		fontSize: 14,
 		fontWeight: "700",
-		color: "#fff",
+		color: PRIMARY_TEXT,
 	},
-	sectionTitle: {
+	aboutTitle: {
 		fontSize: 17,
 		fontWeight: "700",
-		color: "#fff",
+		color: PRIMARY_TEXT,
 		marginBottom: 8,
 	},
 	body: {
 		fontSize: 14,
 		lineHeight: 21,
 		color: "#c7cee3",
+	},
+	viewerBackdrop: {
+		flex: 1,
+		backgroundColor: "rgba(5,7,26,0.98)",
+	},
+	viewerSafeArea: {
+		flex: 1,
+	},
+	viewerHeader: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		paddingHorizontal: 18,
+		paddingTop: 18,
+		paddingBottom: 10,
+	},
+	viewerCounterBadge: {
+		borderRadius: 999,
+		borderWidth: 1,
+		borderColor: BORDER,
+		backgroundColor: "rgba(255,255,255,0.08)",
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+	},
+	viewerCounterText: {
+		color: PRIMARY_TEXT,
+		fontSize: 13,
+		fontWeight: "800",
+	},
+	viewerCloseButton: {
+		width: 42,
+		height: 42,
+		alignItems: "center",
+		justifyContent: "center",
+		borderRadius: 21,
+		borderWidth: 1,
+		borderColor: BORDER,
+		backgroundColor: "rgba(255,255,255,0.08)",
+	},
+	viewerSlide: {
+		flex: 1,
+		alignItems: "center",
+		justifyContent: "center",
+		paddingHorizontal: 14,
+	},
+	viewerImage: {
+		width: "100%",
+		borderRadius: 18,
 	},
 });

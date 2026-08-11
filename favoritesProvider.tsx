@@ -16,6 +16,7 @@ export type FavoritePlace = {
   location: string;
   rating: string;
   image: string;
+  images?: string[];
 };
 
 interface FavoritesContextType {
@@ -38,12 +39,16 @@ const isFavoritePlace = (value: unknown): value is FavoritePlace => {
   }
 
   const place = value as Record<string, unknown>;
+  const images = place.images;
+
   return (
     typeof place.id === "string" &&
     typeof place.name === "string" &&
     typeof place.location === "string" &&
     typeof place.rating === "string" &&
-    typeof place.image === "string"
+    typeof place.image === "string" &&
+    (images === undefined ||
+      (Array.isArray(images) && images.every((image) => typeof image === "string")))
   );
 };
 
