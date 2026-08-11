@@ -139,10 +139,8 @@ export default function DeleteAccountScreen() {
           <View style={styles.panel}>
             <Text style={styles.sectionTitle}>What will be deleted</Text>
             {[
-              'Your Firebase Authentication account',
               'Your RoomRadar profile details and local profile extras',
               'Saved places, favorites, and app preferences on this device',
-              'Security sessions, backup codes, and login history in Firestore',
               'Account-linked posts, appointments, and support requests when those collections are added',
             ].map((item) => (
               <View key={item} style={styles.dataRow}>

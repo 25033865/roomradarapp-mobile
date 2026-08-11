@@ -43,7 +43,9 @@ export default function RootLayout() {
               }}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="place-details" options={{ headerShown: false }} />
+              <Stack.Screen name="manageprofile" options={{ headerShown: false }} />
               <Stack.Screen name="password-security" options={{ headerShown: false }} />
+              <Stack.Screen name="contact-us" options={{ headerShown: false }} />
               <Stack.Screen name="delete-account" options={{ headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
             </Stack>

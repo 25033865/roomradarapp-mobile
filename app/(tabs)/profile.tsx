@@ -23,7 +23,7 @@ import { useAuth } from "../../authprovider";
 import { logoutUser } from "../../authService";
 
 const AVATAR_URL =
-	"https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&q=80";
+	"https://firebasestorage.googleapis.com/v0/b/mudau-1d1cb.firebasestorage.app/o/Mudau.PNG?alt=media&token=d4d82d50-4a87-4c9e-b81c-3e2c580901b1";
 const APP_BACKGROUND = "#05071A";
 const PRIMARY_TEXT = "#FAFAFE";
 const SECONDARY_TEXT = "#B9B9BE";
@@ -48,12 +48,10 @@ const PROFILE_ITEMS: ProfileItem[] = [
 	{ label: "Manage Profile", icon: "person-circle-outline" },
 	{ label: "Password & Security", icon: "lock-closed-outline" },
 	{ label: "Notifications", icon: "notifications-outline" },
-	{ label: "Language", icon: "language-outline" },
-	{ label: "About Us", icon: "information-circle-outline" },
-	{ label: "Theme", icon: "color-palette-outline" },
 	{ label: "Appointments", icon: "calendar-outline" },
 	{ label: "Help Center", icon: "help-circle-outline" },
 	{ label: "Contact Us", icon: "call-outline" },
+	{ label: "About Us", icon: "information-circle-outline" },
 ];
 
 function formatDateOfBirthInput(value: string) {
@@ -194,7 +192,12 @@ export default function ProfileScreen() {
 
 	const handleMenuItemPress = useCallback((label: string) => {
 		if (label === "Password & Security") {
-			router.push("/password-security");
+			router.push("/manageprofile");
+			return;
+		}
+
+		if (label === "Contact Us") {
+			router.push("/contact-us");
 		}
 	}, [router]);
 
